@@ -1,0 +1,1159 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>목행성 간트</title>
+<style>
+/* 레이아웃: 위에 툴바, 아래는 왼쪽 이름 목록(고정) + 오른쪽 타임라인. 항목의 세부 내용은 오른쪽에서 열리는 "세부 사항" 창에서 본다 */
+:root{
+  --bg:#ffffff; --surface:#fafaf9; --hover:#f7f6f3; --line:#ebeaea; --grid:#f1f0ee;
+  --weekend:rgba(55,53,47,.035); --fg:#37352f; --sub:#787774;
+  --accent:#2383e2; --accent-strong:#1f77d4; --accent-ink:#ffffff;
+  --field-hover:#efeeec; --chip-on-bg:#e7f3f8; --chip-on-line:#a9d2e6;
+  --danger:#d44c47; --danger-ink:#ffffff; --today:#eb5757; --weekend-text:#b4b3af;
+  --shadow:rgba(0,0,0,.18); --scrim:rgba(0,0,0,.28); --handle:rgba(0,0,0,.28); --ring:rgba(0,0,0,.16);
+  --st-todo-bg:#e3e2e0;  --st-todo-fill:#c9c8c5;  --st-todo-ink:#32302c;
+  --st-doing-bg:#d3e5ef; --st-doing-fill:#8fc4e3; --st-doing-ink:#183347;
+  --st-done-bg:#dbeddb;  --st-done-fill:#86c79b;  --st-done-ink:#1c3829;
+  --st-hold-bg:#fadec9;  --st-hold-fill:#f0b98b;  --st-hold-ink:#49290e;
+  --left:392px; --cols:260px 116px; --row:38px; --head:52px; --dw:36px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#191919; --surface:#202020; --hover:#262626; --line:#2f2f2f; --grid:#262626;
+    --weekend:rgba(255,255,255,.03); --fg:#e6e4df; --sub:#9b9a97;
+    --accent:#5aa9f0; --accent-strong:#1f77d4; --accent-ink:#ffffff;
+    --field-hover:#2c2c2c; --chip-on-bg:#1f3442; --chip-on-line:#2f5a78;
+    --danger:#f0716c; --danger-ink:#2a0d0c; --today:#eb5757; --weekend-text:#5b5a57;
+    --shadow:rgba(0,0,0,.5); --scrim:rgba(0,0,0,.6); --handle:rgba(255,255,255,.4); --ring:rgba(255,255,255,.14);
+    --st-todo-bg:#3a3a38;  --st-todo-fill:#55544f;  --st-todo-ink:#e6e4df;
+    --st-doing-bg:#1f3a4d; --st-doing-fill:#2f6a8f; --st-doing-ink:#d3e8f5;
+    --st-done-bg:#1f3b2c;  --st-done-fill:#2f7a52;  --st-done-ink:#d5efdf;
+    --st-hold-bg:#4a3320;  --st-hold-fill:#8a5a2a;  --st-hold-ink:#f7dcc3;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#191919; --surface:#202020; --hover:#262626; --line:#2f2f2f; --grid:#262626;
+  --weekend:rgba(255,255,255,.03); --fg:#e6e4df; --sub:#9b9a97;
+  --accent:#5aa9f0; --accent-strong:#1f77d4; --accent-ink:#ffffff;
+  --field-hover:#2c2c2c; --chip-on-bg:#1f3442; --chip-on-line:#2f5a78;
+  --danger:#f0716c; --danger-ink:#2a0d0c; --today:#eb5757; --weekend-text:#5b5a57;
+  --shadow:rgba(0,0,0,.5); --scrim:rgba(0,0,0,.6); --handle:rgba(255,255,255,.4); --ring:rgba(255,255,255,.14);
+  --st-todo-bg:#3a3a38;  --st-todo-fill:#55544f;  --st-todo-ink:#e6e4df;
+  --st-doing-bg:#1f3a4d; --st-doing-fill:#2f6a8f; --st-doing-ink:#d3e8f5;
+  --st-done-bg:#1f3b2c;  --st-done-fill:#2f7a52;  --st-done-ink:#d5efdf;
+  --st-hold-bg:#4a3320;  --st-hold-fill:#8a5a2a;  --st-hold-ink:#f7dcc3;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{height:100%}
+body{
+  margin:0; color:var(--fg); background:var(--bg);
+  font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo","Noto Sans KR","Segoe UI",sans-serif;
+  font-size:14px; display:flex; flex-direction:column; overflow:hidden;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+
+/* 상단 툴바 */
+.toolbar{
+  display:flex; align-items:center; gap:8px; padding:10px 16px;
+  border-bottom:1px solid var(--line); flex-wrap:wrap; flex:none;
+}
+.title{
+  font-size:20px; font-weight:700; border:0; outline:0; background:transparent;
+  padding:4px 6px; border-radius:6px; min-width:0; width:260px; max-width:100%;
+}
+.title:hover,.title:focus{background:var(--hover)}
+.spacer{flex:1}
+.btn{
+  border:1px solid var(--line); background:var(--bg); border-radius:6px; padding:5px 10px;
+  cursor:pointer; white-space:nowrap;
+}
+.btn:hover{background:var(--hover)}
+.btn.primary{background:var(--accent-strong); border-color:var(--accent-strong); color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.danger{background:var(--danger); border-color:var(--danger); color:var(--danger-ink)}
+.btn.danger:hover{filter:brightness(1.06)}
+.btn.ghost-danger{color:var(--danger)}
+.seg{display:inline-flex; border:1px solid var(--line); border-radius:6px; overflow:hidden}
+.seg button{border:0; background:var(--bg); padding:5px 12px; cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on{background:var(--hover); font-weight:600}
+.badge{font-size:11px; color:var(--sub); border:1px dashed var(--line); border-radius:999px; padding:2px 8px}
+.chips{display:inline-flex; gap:4px; flex-wrap:wrap}
+.chip{
+  border:1px solid var(--line); background:var(--bg); border-radius:999px; padding:4px 10px;
+  cursor:pointer; font-size:13px; display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+}
+.chip i{width:8px; height:8px; border-radius:50%; display:inline-block}
+.chip:hover{background:var(--hover)}
+.chip.on{background:var(--chip-on-bg); border-color:var(--chip-on-line); font-weight:600}
+
+/* 스크롤 영역 */
+#scroll{flex:1; min-height:0; overflow:auto; position:relative; overscroll-behavior:contain; -webkit-overflow-scrolling:touch}
+#scroll.panning, #scroll.panning *{cursor:grabbing !important; user-select:none}
+#inner{position:relative}
+.row{display:flex; height:var(--row); border-bottom:1px solid var(--line)}
+.row.head{height:var(--head); position:sticky; top:0; z-index:6; background:var(--bg)}
+.left{
+  flex:0 0 var(--left); position:sticky; left:0; z-index:4; background:var(--bg);
+  border-right:1px solid var(--line);
+  display:grid; grid-template-columns:var(--cols);
+  align-items:center; gap:4px; padding:0 6px;
+}
+.row.l0 .left{background:var(--surface)}
+.row.head .left{z-index:7; color:var(--sub); font-size:12px; font-weight:600; background:var(--bg)}
+.row:not(.head):hover .left{background:var(--hover)}
+.nm{display:flex; align-items:center; gap:2px; min-width:0}
+.ind{flex:none}
+.tg{
+  flex:none; width:18px; height:22px; border:0; background:transparent; cursor:pointer;
+  color:var(--sub); border-radius:4px; font-size:11px; padding:0;
+}
+.tg:hover{background:var(--field-hover)}
+.tg.sp{cursor:default; visibility:hidden}
+.left input[type=text]{
+  width:100%; border:1px solid transparent; background:transparent; border-radius:4px;
+  padding:4px 4px; height:28px; outline:0; min-width:0;
+}
+.nm input[type=text]{flex:1}
+.row.l0 .nm input[type=text]{font-weight:700}
+.row.l2 .nm input[type=text]{color:var(--sub)}
+.left input:hover{background:var(--field-hover)}
+.left input:focus{border-color:var(--accent); background:var(--bg)}
+
+/* 줄 위에 마우스를 올리면 나오는 버튼 */
+.acts{display:flex; gap:4px; justify-content:flex-end; align-items:center}
+.ab{
+  border:0; background:transparent; cursor:pointer; color:var(--sub); font-size:16px;
+  border-radius:4px; width:24px; height:24px; opacity:0; padding:0; line-height:1;
+}
+.row:hover .ab,.row:focus-within .ab,.ab:focus-visible{opacity:1}
+.ab:hover{background:var(--field-hover); color:var(--fg)}
+.ab.txt{width:auto; padding:0 8px; font-size:12px; border:1px solid var(--line); background:var(--bg); color:var(--fg)}
+.ab.txt:hover{background:var(--hover)}
+.ab.start{background:var(--chip-on-bg); border-color:var(--chip-on-line)}
+@media (hover:none){ .ab{opacity:1} }
+
+/* 제목 행: 이름 열의 경계를 끌어 너비 조절 */
+.row.head .left > div{position:relative; white-space:nowrap}
+.ht{display:block; overflow:hidden; text-overflow:ellipsis}
+.rs{position:absolute; right:-6px; top:0; bottom:0; width:12px; cursor:col-resize; touch-action:none; z-index:3}
+.rs::after{content:""; position:absolute; left:5px; top:22%; bottom:22%; width:2px; border-radius:1px; background:var(--line)}
+.rs:hover::after,.rs.on::after{background:var(--accent)}
+@media (hover:none){ .rs{width:18px; right:-9px} .rs::after{left:8px} }
+
+.tl{position:relative; flex:0 0 auto; cursor:grab}
+.row:not(.head) .tl{
+  background-image:
+    repeating-linear-gradient(to right, var(--grid) 0 1px, transparent 1px var(--dw)),
+    linear-gradient(to right, transparent 0 calc(var(--dw) * 5), var(--weekend) calc(var(--dw) * 5) calc(var(--dw) * 7));
+  background-size:auto, calc(var(--dw) * 7) 100%;
+}
+.row.head .tl{display:flex; flex-direction:column}
+.hr{display:flex; height:calc(var(--head) / 2); border-bottom:1px solid var(--line); position:relative}
+.hc{
+  flex:0 0 auto; font-size:12px; color:var(--sub); border-right:1px solid var(--line);
+  padding:0 6px; line-height:calc(var(--head) / 2); overflow:hidden; white-space:nowrap;
+}
+.hc.today{color:var(--accent); font-weight:700}
+.hc.we{color:var(--weekend-text)}
+
+.today-line{position:absolute; top:0; bottom:0; width:2px; background:var(--today); opacity:.7; z-index:2; pointer-events:none}
+
+/* 막대 (단계별 두께) */
+.bar{
+  position:absolute; border-radius:6px;
+  z-index:3; cursor:grab; user-select:none; touch-action:pan-x pan-y; overflow:visible;
+}
+.bar.lvl0{top:5px; height:calc(var(--row) - 10px)}
+.bar.lvl1{top:7px; height:calc(var(--row) - 14px)}
+.bar.lvl2{top:10px; height:calc(var(--row) - 20px)}
+.bar:active{cursor:grabbing}
+.bar .fill{position:absolute; inset:0 auto 0 0; border-radius:6px 0 0 6px}
+.bar .bg{position:absolute; inset:0; border-radius:6px}
+.bar.lvl0 .bg{box-shadow:inset 0 0 0 1.5px var(--ring)}
+.bar .in{
+  position:absolute; inset:0; padding:0 10px; display:flex; align-items:center;
+  font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  pointer-events:none;
+}
+.bar.lvl0 .in{font-weight:700}
+.bar.lvl2 .in{font-weight:500; font-size:11px}
+.bar .out{
+  position:absolute; left:calc(100% + 8px); top:0; height:100%; display:flex; align-items:center;
+  font-size:12px; white-space:nowrap; pointer-events:none; color:var(--sub);
+}
+.bar .h{position:absolute; top:0; width:9px; height:100%; cursor:ew-resize; z-index:2}
+.bar .h.l{left:-3px}
+.bar .h.r{right:-3px}
+.bar:hover .h::after{
+  content:""; position:absolute; top:25%; height:50%; left:3px; width:3px; border-radius:2px; background:var(--handle);
+}
+.bar.drag{box-shadow:0 2px 8px var(--shadow)}
+
+.empty{padding:40px 16px; color:var(--sub); text-align:center}
+
+/* 백업 / 복원 패널 */
+.panel{
+  position:fixed; right:16px; top:calc(env(safe-area-inset-top, 0px) + 56px);
+  width:min(540px, calc(100% - 32px)); z-index:30;
+  background:var(--bg); border:1px solid var(--line); border-radius:10px;
+  box-shadow:0 8px 28px var(--shadow); padding:14px; display:flex; flex-direction:column; gap:10px;
+}
+.panel p{margin:0; color:var(--sub); font-size:13px; line-height:1.5}
+.panel textarea{
+  width:100%; min-height:180px; resize:vertical; border:1px solid var(--line); border-radius:6px;
+  background:var(--surface); padding:8px 10px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px;
+}
+.pbtns{display:flex; gap:6px; align-items:center; flex-wrap:wrap}
+.pmsg{font-size:12px; color:var(--sub); min-width:0; flex-basis:100%}
+.pmsg.err{color:var(--danger)}
+
+/* 세부 사항 창 */
+.backdrop{position:fixed; inset:0; background:var(--scrim); z-index:39}
+.drawer{
+  position:fixed; top:0; right:0; bottom:0; width:min(440px, 100%); z-index:40;
+  background:var(--bg); border-left:1px solid var(--line); box-shadow:-8px 0 28px var(--shadow);
+  display:flex; flex-direction:column; outline:0;
+}
+.dh{padding:calc(env(safe-area-inset-top, 0px) + 14px) 16px 8px; display:flex; flex-direction:column; gap:6px; flex:none}
+.dh-top{display:flex; align-items:center; gap:8px}
+.lvl{font-size:12px; font-weight:600; color:var(--sub); border:1px solid var(--line); border-radius:999px; padding:2px 10px}
+.dclose{border:0; background:transparent; cursor:pointer; font-size:22px; line-height:1; width:32px; height:32px; border-radius:6px; color:var(--sub)}
+.dclose:hover{background:var(--hover); color:var(--fg)}
+.crumb{font-size:12px; color:var(--sub); overflow-wrap:anywhere}
+.dtitle{margin:0; font-size:20px; line-height:1.35; text-wrap:balance; overflow-wrap:anywhere}
+.dtabrow{padding:4px 16px 10px; flex:none}
+.dbody{flex:1; min-height:0; overflow:auto; padding:6px 16px 16px; display:flex; flex-direction:column; gap:18px}
+.df{
+  flex:none; display:flex; gap:8px; align-items:center; flex-wrap:wrap; border-top:1px solid var(--line);
+  padding:12px 16px calc(env(safe-area-inset-bottom, 0px) + 12px); background:var(--bg);
+}
+.df .msg{flex-basis:100%; font-size:13px; line-height:1.5}
+.pill{display:inline-block; font-size:12px; font-weight:600; border-radius:999px; padding:2px 10px; white-space:nowrap}
+.info{display:grid; grid-template-columns:64px minmax(0,1fr); gap:12px 12px; margin:0; align-items:center}
+.info dt{color:var(--sub); font-size:13px}
+.info dd{margin:0; min-width:0; overflow-wrap:anywhere}
+.prog{display:flex; align-items:center; gap:10px}
+.pbar{flex:1; height:8px; border-radius:999px; background:var(--st-todo-bg); overflow:hidden}
+.pbar i{display:block; height:100%; border-radius:999px}
+.prog span{font-size:13px; font-variant-numeric:tabular-nums; min-width:3ch; text-align:right}
+.note{margin:0; font-size:13px; color:var(--sub); line-height:1.55}
+.kh{font-size:13px; font-weight:600; margin-bottom:6px}
+.kids{display:flex; flex-direction:column}
+.kid{
+  display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:10px;
+  text-align:left; border:0; border-top:1px solid var(--line); background:transparent; cursor:pointer;
+  padding:9px 6px; border-radius:0; width:100%;
+}
+.kid:hover{background:var(--hover)}
+.kid .dot{width:10px; height:10px; border-radius:50%}
+.kid .kn{display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.kid .kd{display:block; font-size:12px; color:var(--sub); font-variant-numeric:tabular-nums}
+.field{display:grid; gap:4px}
+.flabel{font-size:12px; color:var(--sub)}
+.finput{
+  width:100%; height:36px; border:1px solid var(--line); background:var(--bg); border-radius:6px; padding:0 10px; min-width:0;
+}
+.finput:focus{border-color:var(--accent); outline:0}
+.finput:disabled{color:var(--sub); background:var(--surface)}
+.frow{display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px}
+.ferr{color:var(--danger); font-size:13px; min-height:1.2em}
+
+/* 달력 */
+.cnav{display:flex; align-items:center; gap:6px; margin-bottom:8px; flex-wrap:wrap}
+.cnav strong{flex:1; text-align:center; font-size:15px; min-width:7em}
+.cwd,.cgrid{display:grid; grid-template-columns:repeat(7, minmax(0,1fr))}
+.cwd div{text-align:center; font-size:12px; color:var(--sub); padding:6px 0}
+.cgrid{border-left:1px solid var(--line); border-bottom:1px solid var(--line)}
+.cd{
+  min-height:56px; border-top:1px solid var(--line); border-right:1px solid var(--line);
+  padding:4px; display:flex; flex-direction:column; gap:2px; font-size:12px; min-width:0;
+}
+.cd.out{opacity:.4}
+.cd .n{font-weight:600; width:22px; height:22px; display:grid; place-items:center; border-radius:999px; font-variant-numeric:tabular-nums}
+.cd.we:not(.in) .n{color:var(--sub)}
+.cd.today .n{background:var(--accent-strong); color:var(--accent-ink)}
+.cd .tag{font-size:10px; font-weight:700; line-height:1.2}
+.cdots{display:flex; gap:3px; flex-wrap:wrap; margin-top:auto}
+.cdots i{width:6px; height:6px; border-radius:50%; display:block}
+.legend{display:flex; flex-wrap:wrap; gap:6px 14px; font-size:12px; color:var(--sub); margin-top:8px}
+.legend span{display:inline-flex; align-items:center; gap:6px}
+.legend i{width:12px; height:12px; border-radius:3px; display:inline-block; border:1px solid var(--line)}
+.legend i.c{width:8px; height:8px; border-radius:50%; border:0}
+
+/* 안내 말풍선 */
+.toast{
+  position:fixed; left:50%; transform:translateX(-50%); z-index:60; max-width:calc(100% - 32px);
+  bottom:calc(env(safe-area-inset-bottom, 0px) + 20px);
+  background:var(--fg); color:var(--bg); border-radius:8px; padding:9px 14px; font-size:13px; box-shadow:0 6px 20px var(--shadow);
+}
+
+/* 좁은 화면 */
+@media (max-width:720px){
+  .badge{display:none}
+  .ab.txt{padding:0 6px}
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <input class="title" id="title" value="목행성 간트" aria-label="제목">
+  <span class="spacer"></span>
+  <span class="badge">노션 · 구글 캘린더 연동 준비 중</span>
+  <div class="chips" id="filter" role="group" aria-label="상태 필터"></div>
+  <div class="seg" id="zoom">
+    <button data-z="day">일</button>
+    <button data-z="week">주</button>
+    <button data-z="month">월</button>
+  </div>
+  <button class="btn" id="expandAll">모두 펼치기</button>
+  <button class="btn" id="collapseAll">모두 접기</button>
+  <button class="btn" id="today">오늘</button>
+  <button class="btn" id="data">백업 / 복원</button>
+  <button class="btn primary" id="add">+ 목행성 추가</button>
+</div>
+
+<div class="panel" id="dataPanel" role="dialog" aria-label="백업 / 복원" hidden>
+  <p>아래 내용을 복사해 메모장 등에 저장해 두면 백업이 됩니다. 저장해 둔 내용을 붙여 넣고 “가져오기”를 누르면 복원됩니다.</p>
+  <textarea id="dataText" spellcheck="false" aria-label="백업 데이터"></textarea>
+  <div class="pbtns">
+    <button class="btn" id="dataCopy">복사</button>
+    <button class="btn" id="dataApply">가져오기</button>
+    <button class="btn" id="dataFile">파일에서 불러오기</button>
+    <input type="file" id="file" accept="application/json,.json" hidden>
+    <span class="spacer"></span>
+    <button class="btn" id="dataClose">닫기</button>
+    <span class="pmsg" id="dataMsg" role="status"></span>
+  </div>
+</div>
+
+<div id="scroll"><div id="inner"></div></div>
+
+<div class="backdrop" id="backdrop" hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="세부 사항" tabindex="-1" hidden></aside>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(function(){
+'use strict';
+
+/* ---------- 용어 / 단계 ---------- */
+const LEVELS = ['목행성', '꿈일', '세부 꿈일'];   // 0, 1, 2단계
+const MAX_LEVEL = 2;
+const mq = window.matchMedia ? window.matchMedia('(max-width:720px)') : { matches:false, addEventListener(){} };
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* 예전에 저장된 기본 이름을 새 용어로 바꿈 (직접 입력한 이름은 그대로 둠) */
+const RENAME = { '(예시) 하위 꿈일':'(예시) 세부 꿈일', '새 하위 꿈일':'새 세부 꿈일' };
+const fixName = n => RENAME[n] || n;
+
+/* ---------- 이름 열 너비 (제목 행의 경계를 끌어 조절) ---------- */
+const NAME_DEF = { d:260, m:120 }, NAME_LIM = [80, 420];
+const actW = () => mq.matches ? 104 : 116;
+const grp = () => mq.matches ? 'm' : 'd';
+let curTlw = 0;
+function normColw(c){
+  const o = { d:NAME_DEF.d, m:NAME_DEF.m };
+  ['d','m'].forEach(g => { const v = c ? Number(c[g]) : 0; if(v) o[g] = clamp(Math.round(v), NAME_LIM[0], NAME_LIM[1]); });
+  return o;
+}
+const leftW = () => state.colw[grp()] + actW() + 16;      // 두 칸 + 칸 사이 간격 4px + 좌우 여백 12px
+function applyLayout(){
+  const L = leftW(), root = document.documentElement.style;
+  root.setProperty('--cols', state.colw[grp()] + 'px ' + actW() + 'px');
+  root.setProperty('--left', L + 'px');
+  inner.style.width = (L + curTlw) + 'px';
+}
+function startResize(ev){
+  if(ev.button !== undefined && ev.button !== 0) return;
+  ev.preventDefault(); ev.stopPropagation();
+  const g = grp(), x0 = ev.clientX, w0 = state.colw[g], el = ev.currentTarget;
+  try{ el.setPointerCapture(ev.pointerId); }catch(err){}
+  el.classList.add('on');
+  const move = m => { state.colw[g] = clamp(Math.round(w0 + m.clientX - x0), NAME_LIM[0], NAME_LIM[1]); applyLayout(); };
+  const up = () => {
+    el.removeEventListener('pointermove', move);
+    el.removeEventListener('pointerup', up);
+    el.removeEventListener('pointercancel', up);
+    el.classList.remove('on');
+    persist();
+  };
+  el.addEventListener('pointermove', move);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+}
+function resetCol(){ state.colw[grp()] = NAME_DEF[grp()]; applyLayout(); persist(); }
+
+/* ---------- 날짜 유틸 (일 단위 정수) ---------- */
+const DAY = 864e5;
+const parse = s => { const [y,m,d] = s.split('-').map(Number); return Math.floor(Date.UTC(y,m-1,d)/DAY); };
+const fmt = n => new Date(n*DAY).toISOString().slice(0,10);
+const localToday = () => { const n = new Date(); return Math.floor(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate())/DAY); };
+const weekdayIdx = n => ((n+3)%7+7)%7;           // 월=0 ... 일=6
+const alignMonday = n => n - weekdayIdx(n);
+const WD = ['월','화','수','목','금','토','일'];
+const kDate = n => { const d = new Date(n*DAY); return `${d.getUTCFullYear()}년 ${d.getUTCMonth()+1}월 ${d.getUTCDate()}일 (${WD[weekdayIdx(n)]})`; };
+const shortDate = n => { const d = new Date(n*DAY); return `${d.getUTCMonth()+1}/${d.getUTCDate()}`; };
+const monthOf = n => { const d = new Date(n*DAY); return { y:d.getUTCFullYear(), m:d.getUTCMonth() }; };
+
+/* ---------- 상태 (색은 CSS 변수라서 밝은/어두운 화면에 모두 맞음) ---------- */
+const STATUS = {
+  todo:  { label:'할 일',  bg:'var(--st-todo-bg)',  fill:'var(--st-todo-fill)',  ink:'var(--st-todo-ink)' },
+  doing: { label:'진행 중', bg:'var(--st-doing-bg)', fill:'var(--st-doing-fill)', ink:'var(--st-doing-ink)' },
+  done:  { label:'완료',   bg:'var(--st-done-bg)',  fill:'var(--st-done-fill)',  ink:'var(--st-done-ink)' },
+  hold:  { label:'보류',   bg:'var(--st-hold-bg)',  fill:'var(--st-hold-fill)',  ink:'var(--st-hold-ink)' }
+};
+const ZOOM = { day:36, week:16, month:5 };
+
+/* ---------- 저장소 어댑터 ----------
+   지금은 브라우저(localStorage)에 저장합니다.
+   나중에 Cloudflare Worker(D1/KV) API로 바꿀 때 이 객체만 교체하면 됩니다. */
+const storage = {
+  key:'gantt.v2',
+  async load(){ try{ const r = localStorage.getItem(this.key); return r ? JSON.parse(r) : null; }catch(e){ return null; } },
+  async save(data){ try{ localStorage.setItem(this.key, JSON.stringify(data)); }catch(e){} }
+};
+
+let state = { title:'목행성 간트', zoom:'day', filter:[], colw:normColw(), tasks:[] };
+const view = { start:null, end:null };
+const $ = id => document.getElementById(id);
+const scrollEl = $('scroll'), inner = $('inner');
+const drawer = $('drawer'), backdrop = $('backdrop');
+const uid = () => Math.random().toString(36).slice(2,9);
+
+/* ---------- 트리 구조 ---------- */
+let idx = { by:new Map(), id:new Map() };
+function reindex(){
+  idx = { by:new Map(), id:new Map() };
+  state.tasks.forEach(t => idx.id.set(t.id, t));
+  state.tasks.forEach(t => {
+    const key = t.parent || 'root';
+    if(!idx.by.has(key)) idx.by.set(key, []);
+    idx.by.get(key).push(t);
+  });
+}
+const kidsOf = id => idx.by.get(id) || [];
+function levelOf(t){
+  let l = 0, p = t.parent, guard = 0;
+  while(p && guard++ < 10){ l++; const pt = idx.id.get(p); p = pt ? pt.parent : null; }
+  return l;
+}
+function descendants(id){
+  const out = [];
+  kidsOf(id).forEach(c => { out.push(c); out.push(...descendants(c.id)); });
+  return out;
+}
+const leavesOf = t => { const k = kidsOf(t.id); return k.length ? k.flatMap(leavesOf) : [t]; };
+const canStart = t => leavesOf(t).some(l => l.status === 'todo' || l.status === 'hold');
+
+/* 상태 필터: 조건에 맞는 항목과, 그 항목을 품은 상위 항목(목행성·꿈일)을 함께 보여줌 */
+const filtering = () => state.filter.length > 0;
+const matchesFilter = t => !filtering() || state.filter.includes(t.status);
+const hasMatch = t => matchesFilter(t) || descendants(t.id).some(matchesFilter);
+
+function visibleRows(){
+  const out = [];
+  (function walk(key, level){
+    (idx.by.get(key) || []).forEach(t => {
+      if(filtering() && !hasMatch(t)) return;
+      out.push({ t, level });
+      if(!t.collapsed || filtering()) walk(t.id, level + 1);   // 필터 중에는 접힌 항목 안의 결과도 표시
+    });
+  })('root', 0);
+  return out;
+}
+
+function renderFilter(){
+  const box = $('filter');
+  box.replaceChildren();
+  const mk = (key, label, color) => {
+    const on = key === 'all' ? !filtering() : state.filter.includes(key);
+    const kids = color ? [h('i', {style:`background:${color}`}), txt(label)] : [txt(label)];
+    return h('button', {class:'chip' + (on ? ' on' : ''), 'data-s':key, 'aria-pressed':String(on)}, kids);
+  };
+  box.append(mk('all', '전체'));
+  Object.keys(STATUS).forEach(k => box.append(mk(k, STATUS[k].label, STATUS[k].fill)));
+}
+
+/* 세부 항목이 있는 상위 항목은 기간·진행률·상태를 자동으로 집계 */
+function rollup(t){
+  const kids = kidsOf(t.id);
+  if(!kids.length) return;
+  kids.forEach(rollup);
+  let lo = Infinity, hi = -Infinity, wsum = 0, psum = 0;
+  kids.forEach(k => {
+    const s = parse(k.start), e = parse(k.end), dur = e - s + 1;
+    lo = Math.min(lo, s); hi = Math.max(hi, e);
+    wsum += dur; psum += (k.progress || 0) * dur;
+  });
+  t.start = fmt(lo); t.end = fmt(hi);
+  t.progress = wsum ? Math.round(psum / wsum) : 0;
+  const sts = kids.map(k => k.status);
+  if(sts.every(x => x === 'done')) t.status = 'done';
+  else if(sts.some(x => x === 'doing' || x === 'done') || t.progress > 0) t.status = 'doing';
+  else if(sts.every(x => x === 'hold')) t.status = 'hold';
+  else t.status = 'todo';
+}
+function recompute(){ reindex(); (idx.by.get('root') || []).forEach(rollup); }
+
+/* 가져온 데이터 정리: 없는 부모 제거, 3단계 초과 방지 */
+function sanitize(list){
+  const ids = new Set(list.map(k => k.id));
+  list.forEach(k => { k.name = fixName(k.name); if(k.parent && (!ids.has(k.parent) || k.parent === k.id)) k.parent = null; });
+  state.tasks = list; reindex();
+  list.forEach(k => {
+    let guard = 0;
+    while(levelOf(k) > MAX_LEVEL && guard++ < 10){
+      const p = idx.id.get(k.parent);
+      k.parent = p ? (p.parent || null) : null;
+      reindex();
+    }
+  });
+  return list;
+}
+
+function sample(){
+  const t = localToday(), m = alignMonday(t);
+  const ids = Array.from({length:10}, uid);
+  const mk = (i, parent, name, s, e, status, progress) =>
+    ({ id:ids[i], parent: parent === null ? null : ids[parent], name, start:fmt(m+s), end:fmt(m+e), status, progress, collapsed:false });
+  return [
+    mk(0, null, '노션 간트 앱 완성',        -3, 21, 'doing', 0),
+    mk(1, 0,    '기본 화면 만들기',         -3,  6, 'doing', 0),
+    mk(2, 1,    '타임라인 화면',            -3,  1, 'done', 100),
+    mk(3, 1,    '드래그로 일정 수정',        0,  6, 'doing', 60),
+    mk(4, 0,    '서비스 연동',               4, 21, 'todo', 0),
+    mk(5, 4,    '회원 시스템 로그인',        4, 10, 'doing', 20),
+    mk(6, 4,    '노션 · 구글 캘린더 연결',  11, 21, 'todo', 0),
+    mk(7, null, '(예시) 두 번째 목행성',     2, 19, 'todo', 0),
+    mk(8, 7,    '(예시) 꿈일',               2, 10, 'todo', 0),
+    mk(9, 8,    '(예시) 세부 꿈일',          2,  6, 'todo', 0)
+  ];
+}
+
+let saveTimer = null;
+function persist(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => storage.save(state), 150);
+}
+
+/* ---------- DOM 헬퍼 ---------- */
+function h(tag, attrs, kids){
+  const el = document.createElement(tag);
+  if(attrs) for(const k in attrs){
+    const v = attrs[k];
+    if(k === 'class') el.className = v;
+    else if(k === 'style') el.style.cssText = v;
+    else if(v !== false && v != null) el.setAttribute(k, v);
+  }
+  (kids||[]).forEach(c => { if(c) el.append(c); });
+  return el;
+}
+const txt = s => document.createTextNode(s);
+
+let toastTimer = null;
+function toast(msg){
+  const el = $('toast');
+  el.textContent = msg; el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, 2600);
+}
+
+/* ---------- 렌더 ---------- */
+function ensureRange(){
+  const t = localToday();
+  let lo = t, hi = t;
+  state.tasks.forEach(k => { lo = Math.min(lo, parse(k.start)); hi = Math.max(hi, parse(k.end)); });
+  const needStart = alignMonday(lo - 14);
+  const needEnd = alignMonday(hi + 60) + 6;
+  let shift = 0;
+  if(view.start === null){ view.start = needStart; view.end = needEnd; }
+  else {
+    if(needStart < view.start){ shift = view.start - needStart; view.start = needStart; }
+    if(needEnd > view.end) view.end = needEnd;
+  }
+  return shift;
+}
+
+function render(){
+  recompute();
+  const dw = ZOOM[state.zoom];
+  const shift = ensureRange();
+  const days = view.end - view.start + 1;
+  const tlw = days * dw;
+  const today = localToday();
+  document.documentElement.style.setProperty('--dw', dw + 'px');
+  curTlw = tlw;
+  applyLayout();
+  inner.replaceChildren();
+
+  document.querySelectorAll('#zoom button').forEach(b => b.classList.toggle('on', b.dataset.z === state.zoom));
+  renderFilter();
+
+  /* 헤더 */
+  const top = h('div', {class:'hr'});
+  const bot = h('div', {class:'hr'});
+  let n = view.start;
+  while(n <= view.end){
+    const d = new Date(n*DAY), y = d.getUTCFullYear(), mo = d.getUTCMonth();
+    let e = n;
+    while(e + 1 <= view.end){ const nd = new Date((e+1)*DAY); if(nd.getUTCMonth() !== mo) break; e++; }
+    top.append(h('div', {class:'hc', style:`width:${(e - n + 1) * dw}px`}, [txt(`${y}년 ${mo+1}월`)]));
+    n = e + 1;
+  }
+  if(state.zoom === 'day'){
+    for(let i = view.start; i <= view.end; i++){
+      const wi = weekdayIdx(i), dd = new Date(i*DAY).getUTCDate();
+      const cls = 'hc' + (i === today ? ' today' : '') + (wi >= 5 ? ' we' : '');
+      bot.append(h('div', {class:cls, style:`width:${dw}px;padding:0;text-align:center`}, [txt(`${dd}`)]));
+    }
+  } else {
+    for(let i = view.start; i <= view.end; i += 7){
+      const d = new Date(i*DAY);
+      const label = state.zoom === 'week' ? `${d.getUTCMonth()+1}/${d.getUTCDate()}` : '';
+      const isThisWeek = today >= i && today < i + 7;
+      bot.append(h('div', {class:'hc' + (isThisWeek ? ' today' : ''), style:`width:${7*dw}px`}, [txt(label)]));
+    }
+  }
+  const nameHead = h('div', null, [h('span', {class:'ht'}, [txt(LEVELS.join(' › '))])]);
+  const rs = h('span', {class:'rs', title:'끌어서 이름 칸 너비 조절 (두 번 누르면 기본 너비)', role:'separator', 'aria-orientation':'vertical'});
+  rs.addEventListener('pointerdown', startResize);
+  rs.addEventListener('dblclick', resetCol);
+  nameHead.append(rs);
+  const headLeft = h('div', {class:'left'}, [nameHead, h('div')]);
+  inner.append(h('div', {class:'row head'}, [headLeft, h('div', {class:'tl', style:`width:${tlw}px`}, [top, bot])]));
+
+  /* 본문 */
+  const rows = visibleRows();
+  if(!rows.length){
+    const msg = filtering() ? '선택한 상태에 해당하는 항목이 없습니다. 위에서 “전체”를 누르면 모두 볼 수 있습니다.'
+                            : '아직 목행성이 없습니다. 오른쪽 위의 “+ 목행성 추가”를 눌러 시작하세요.';
+    inner.append(h('div', {class:'empty', style:'position:sticky;left:0;width:var(--left)'}, [txt(msg)]));
+  }
+  rows.forEach(r => inner.append(buildRow(r.t, r.level, dw, tlw, today)));
+
+  if(shift) scrollEl.scrollLeft += shift * dw;
+  if(detail.id) renderDetail();
+}
+
+function buildRow(task, level, dw, tlw, today){
+  const kids = kidsOf(task.id);
+  const isParent = kids.length > 0;
+
+  const toggle = h('button', {class:'tg' + (isParent ? '' : ' sp'), title: isParent ? '접기/펼치기' : '', 'aria-label':'접기/펼치기'}, [txt(task.collapsed ? '▶' : '▼')]);
+  const nameIn = h('input', {type:'text', value:task.name, 'data-id':task.id, placeholder:LEVELS[level] + ' 이름', 'aria-label':LEVELS[level] + ' 이름'});
+  const nm = h('div', {class:'nm'}, [h('span', {class:'ind', style:`width:${level * 18}px`}), toggle, nameIn]);
+
+  /* 마우스를 올리면 나오는 버튼: 보기 · 시작 · + */
+  const acts = h('div', {class:'acts'});
+  const viewBtn = h('button', {class:'ab txt view', title:'세부 사항 보기'}, [txt('보기')]);
+  acts.append(viewBtn);
+  let startBtn = null;
+  if(canStart(task)){
+    startBtn = h('button', {class:'ab txt start', title:'시작하기 (진행 중으로 바꾸기)'}, [txt('시작')]);
+    acts.append(startBtn);
+  }
+  let addBtn = null;
+  if(level < MAX_LEVEL){
+    addBtn = h('button', {class:'ab add', title:LEVELS[level + 1] + ' 추가', 'aria-label':LEVELS[level + 1] + ' 추가'}, [txt('+')]);
+    acts.append(addBtn);
+  }
+
+  const left = h('div', {class:'left'}, [nm, acts]);
+  const tl = h('div', {class:'tl', style:`width:${tlw}px`});
+  const row = h('div', {class:'row l' + level}, [left, tl]);
+
+  tl.append(h('div', {class:'today-line', style:`left:${(today - view.start)*dw + dw/2 - 1}px`}));
+  const bar = makeBar(task, level, isParent, dw);
+  tl.append(bar);
+
+  /* 이벤트 */
+  if(isParent) toggle.addEventListener('click', () => { task.collapsed = !task.collapsed; persist(); render(); });
+  nameIn.addEventListener('input', () => {
+    task.name = nameIn.value; persist();
+    bar.querySelectorAll('.in,.out').forEach(x => x.textContent = task.name || '(이름 없음)');
+  });
+  nameIn.addEventListener('keydown', e => { if(e.key === 'Enter') nameIn.blur(); });
+  viewBtn.addEventListener('click', () => openDetail(task));
+  if(startBtn) startBtn.addEventListener('click', () => startTask(task));
+  if(addBtn) addBtn.addEventListener('click', () => addTask(task));
+  return row;
+}
+
+/* 시작: 아직 시작하지 않은(할 일·보류) 세부 항목을 진행 중으로 바꿈 */
+function startTask(t){
+  const ls = leavesOf(t).filter(l => l.status === 'todo' || l.status === 'hold');
+  if(!ls.length) return;
+  const isParent = kidsOf(t.id).length > 0;
+  ls.forEach(l => { l.status = 'doing'; });
+  persist(); render();
+  toast(isParent ? `시작했습니다. 안에 있는 ${ls.length}개 항목이 진행 중으로 바뀌었어요.` : '시작했습니다. 진행 중으로 바뀌었어요.');
+}
+
+function addTask(parent){
+  const t = localToday();
+  let level = 0, start = t, end = t + 6;
+  if(parent){
+    level = levelOf(parent) + 1;
+    if(level > MAX_LEVEL) return;
+    parent.collapsed = false;
+    const ps = parse(parent.start), pe = parse(parent.end);
+    if(kidsOf(parent.id).length === 0){ start = ps; end = pe; }       // 첫 세부 항목은 상위와 같은 기간으로 시작
+    else { start = ps; end = Math.min(pe, ps + 6); }
+  }
+  const task = { id:uid(), parent: parent ? parent.id : null, name:'새 ' + LEVELS[level], start:fmt(start), end:fmt(end), status:'todo', progress:0, collapsed:false };
+  // 같은 부모의 마지막 자식 뒤(= 그 세부 항목들 뒤)에 끼워 넣기
+  let insertAt = state.tasks.length;
+  if(parent){
+    const group = [parent, ...descendants(parent.id)];
+    const last = group.reduce((m, g) => Math.max(m, state.tasks.indexOf(g)), -1);
+    insertAt = last + 1;
+  }
+  state.tasks.splice(insertAt, 0, task);
+  if(filtering() && !state.filter.includes('todo')) state.filter = [];   // 새 항목(할 일)이 필터에 가려지지 않도록 해제
+  persist(); render();
+  const inp = inner.querySelector(`input[data-id="${task.id}"]`);
+  if(inp){ inp.focus(); inp.select(); inp.scrollIntoView({block:'nearest'}); }
+}
+
+function place(bar, s, e, dw){
+  bar.style.left = ((s - view.start) * dw) + 'px';
+  bar.style.width = ((e - s + 1) * dw) + 'px';
+}
+
+function makeBar(task, level, isParent, dw){
+  const st = STATUS[task.status] || STATUS.todo;
+  const s = parse(task.start), e = parse(task.end);
+  const w = (e - s + 1) * dw;
+  const label = task.name || '(이름 없음)';
+  const bar = h('div', {class:'bar lvl' + level, title:`${label} · ${shortDate(s)} ~ ${shortDate(e)} · ${st.label} · ${task.progress || 0}%`});
+  place(bar, s, e, dw);
+  bar.append(h('div', {class:'bg', style:`background:${st.bg}`}));
+  bar.append(h('div', {class:'fill', style:`background:${st.fill};width:${clamp(task.progress||0, 0, 100)}%`}));
+  if(w >= 90) bar.append(h('div', {class:'in', style:`color:${st.ink}`}, [txt(label)]));
+  else bar.append(h('div', {class:'out'}, [txt(label)]));
+
+  bar.addEventListener('pointerdown', ev => startDrag(ev, task, 'move', bar, dw, isParent));
+  if(!isParent){   // 상위 항목은 기간이 자동 계산되므로 양 끝 조절 없음
+    const hl = h('div', {class:'h l'}), hr = h('div', {class:'h r'});
+    bar.append(hl, hr);
+    hl.addEventListener('pointerdown', ev => startDrag(ev, task, 'l', bar, dw, false));
+    hr.addEventListener('pointerdown', ev => startDrag(ev, task, 'r', bar, dw, false));
+  }
+  return bar;
+}
+
+function startDrag(ev, task, mode, bar, dw, isParent){
+  if(ev.button !== undefined && ev.button !== 0) return;
+  ev.stopPropagation();
+  if(ev.pointerType === 'touch'){
+    /* 터치: 막대를 짧게 누르고 있으면 막대 이동, 바로 밀면 화면이 좌우로 스크롤 */
+    let lx = ev.clientX, ly = ev.clientY, timer = null;
+    const stop = () => {
+      clearTimeout(timer);
+      bar.removeEventListener('pointermove', watch);
+      bar.removeEventListener('pointerup', stop);
+      bar.removeEventListener('pointercancel', stop);
+    };
+    const watch = m => { lx = m.clientX; ly = m.clientY; if(Math.abs(lx - ev.clientX) > 8 || Math.abs(ly - ev.clientY) > 8) stop(); };
+    bar.addEventListener('pointermove', watch);
+    bar.addEventListener('pointerup', stop);
+    bar.addEventListener('pointercancel', stop);
+    timer = setTimeout(() => {
+      stop();
+      try{ if(navigator.vibrate) navigator.vibrate(12); }catch(err){}
+      beginDrag(ev, task, mode, bar, dw, isParent, lx, true);
+    }, 320);
+    return;
+  }
+  ev.preventDefault();
+  beginDrag(ev, task, mode, bar, dw, isParent, ev.clientX, false);
+}
+
+function beginDrag(ev, task, mode, bar, dw, isParent, startX, touch){
+  const x0 = startX, s0 = parse(task.start), e0 = parse(task.end);
+  let s = s0, e = e0, ds = 0, moved = false;
+  try{ bar.setPointerCapture(ev.pointerId); }catch(err){}
+  bar.classList.add('drag');
+  const block = t => t.preventDefault();
+  if(touch) bar.addEventListener('touchmove', block, {passive:false});
+
+  const move = m => {
+    const dd = Math.round((m.clientX - x0) / dw);
+    if(dd === ds) return;
+    ds = dd; moved = true;
+    if(mode === 'move'){ s = s0 + dd; e = e0 + dd; }
+    else if(mode === 'l'){ s = Math.min(s0 + dd, e0); e = e0; }
+    else { e = Math.max(e0 + dd, s0); s = s0; }
+    place(bar, s, e, dw);
+  };
+  const up = () => {
+    bar.removeEventListener('pointermove', move);
+    bar.removeEventListener('pointerup', up);
+    bar.removeEventListener('pointercancel', up);
+    bar.removeEventListener('touchmove', block);
+    bar.classList.remove('drag');
+    if(!moved) return;
+    if(isParent){
+      const delta = s - s0;     // 상위 항목을 옮기면 모든 세부 항목이 함께 이동
+      descendants(task.id).forEach(d => { d.start = fmt(parse(d.start) + delta); d.end = fmt(parse(d.end) + delta); });
+    } else { task.start = fmt(s); task.end = fmt(e); }
+    persist(); render();
+  };
+  bar.addEventListener('pointermove', move);
+  bar.addEventListener('pointerup', up);
+  bar.addEventListener('pointercancel', up);
+}
+
+/* ---------- 세부 사항 창 (보기) ---------- */
+const detail = { id:null, tab:'info', editing:false, confirm:false, cal:null };
+
+function initialMonth(t){
+  const today = localToday();
+  return (today >= parse(t.start) && today <= parse(t.end)) ? monthOf(today) : monthOf(parse(t.start));
+}
+function openDetail(t){
+  detail.id = t.id; detail.tab = 'info'; detail.editing = false; detail.confirm = false;
+  detail.cal = initialMonth(t);
+  $('dataPanel').hidden = true;
+  renderDetail();
+  backdrop.hidden = false; drawer.hidden = false;
+  drawer.focus();
+}
+function closeDetail(){
+  detail.id = null; detail.editing = false; detail.confirm = false;
+  drawer.hidden = true; backdrop.hidden = true; drawer.replaceChildren();
+}
+const pill = st => h('span', {class:'pill', style:`background:${st.bg};color:${st.ink}`}, [txt(st.label)]);
+
+function progressEl(p, st){
+  return h('div', {class:'prog'}, [
+    h('div', {class:'pbar'}, [h('i', {style:`width:${p}%;background:${st.fill}`})]),
+    h('span', null, [txt(`${p}%`)])
+  ]);
+}
+
+function kidList(kids, level){
+  const wrap = h('div', {class:'kids'}, [h('div', {class:'kh'}, [txt(`${LEVELS[level + 1]} ${kids.length}개`)])]);
+  kids.forEach(k => {
+    const ks = STATUS[k.status] || STATUS.todo;
+    const b = h('button', {class:'kid', title:'이 항목의 세부 사항 보기'}, [
+      h('i', {class:'dot', style:`background:${ks.fill}`}),
+      h('span', null, [
+        h('span', {class:'kn'}, [txt(k.name || '(이름 없음)')]),
+        h('span', {class:'kd'}, [txt(`${shortDate(parse(k.start))} ~ ${shortDate(parse(k.end))}`)])
+      ]),
+      pill(ks)
+    ]);
+    b.addEventListener('click', () => openDetail(k));
+    wrap.append(b);
+  });
+  return wrap;
+}
+
+function infoView(t, st, level, kids, isParent){
+  const s = parse(t.start), e = parse(t.end);
+  const dl = h('dl', {class:'info'});
+  const add = (k, v) => dl.append(h('dt', null, [txt(k)]), h('dd', null, [typeof v === 'string' ? txt(v) : v]));
+  add('시작', kDate(s));
+  add('종료', kDate(e));
+  add('기간', `${e - s + 1}일`);
+  add('상태', pill(st));
+  add('진행률', progressEl(t.progress || 0, st));
+  return h('div', {class:'dsec', style:'display:flex;flex-direction:column;gap:18px'}, [
+    dl,
+    isParent ? h('p', {class:'note'}, [txt('시작·종료·상태·진행률은 세부 항목에서 자동으로 계산됩니다. 바꾸려면 아래 세부 항목을 눌러 수정해 주세요.')]) : null,
+    isParent ? kidList(kids, level) : null
+  ]);
+}
+
+function calendarEl(t, kids, level, isParent){
+  const { y, m } = detail.cal;
+  const first = Math.floor(Date.UTC(y, m, 1) / DAY);
+  const dim = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  const last = first + dim - 1;
+  const gridStart = alignMonday(first), gridEnd = alignMonday(last) + 6;
+  const s = parse(t.start), e = parse(t.end), today = localToday();
+  const st = STATUS[t.status] || STATUS.todo;
+
+  const shift = d => {
+    let yy = detail.cal.y, mm = detail.cal.m + d;
+    while(mm < 0){ mm += 12; yy--; }
+    while(mm > 11){ mm -= 12; yy++; }
+    detail.cal = { y:yy, m:mm }; renderDetail();
+  };
+  const nb = (label, aria, fn) => { const b = h('button', {class:'btn', 'aria-label':aria, title:aria}, [txt(label)]); b.addEventListener('click', fn); return b; };
+  const nav = h('div', {class:'cnav'}, [
+    nb('◀', '이전 달', () => shift(-1)),
+    h('strong', null, [txt(`${y}년 ${m + 1}월`)]),
+    nb('▶', '다음 달', () => shift(1)),
+    nb('오늘', '오늘이 있는 달로', () => { detail.cal = monthOf(today); renderDetail(); }),
+    nb('시작일로', '이 항목이 시작하는 달로', () => { detail.cal = monthOf(s); renderDetail(); })
+  ]);
+  const wd = h('div', {class:'cwd'}, WD.map(w => h('div', null, [txt(w)])));
+  const grid = h('div', {class:'cgrid'});
+  for(let d = gridStart; d <= gridEnd; d++){
+    const inMonth = d >= first && d <= last, inRange = d >= s && d <= e;
+    const cls = ['cd'];
+    if(!inMonth) cls.push('out');
+    if(weekdayIdx(d) >= 5) cls.push('we');
+    if(d === today) cls.push('today');
+    if(inRange) cls.push('in');
+    const tag = d === s && d === e ? '하루' : d === s ? '시작' : d === e ? '종료' : '';
+    const dots = isParent ? kids.filter(k => parse(k.start) <= d && d <= parse(k.end)).slice(0, 5) : [];
+    const cell = h('div', {class:cls.join(' '), style: inRange ? `background:${st.bg};color:${st.ink}` : ''}, [
+      h('span', {class:'n'}, [txt(String(new Date(d*DAY).getUTCDate()))]),
+      tag ? h('span', {class:'tag'}, [txt(tag)]) : null,
+      dots.length ? h('div', {class:'cdots'}, dots.map(k => h('i', {style:`background:${(STATUS[k.status] || STATUS.todo).fill}`}))) : null
+    ]);
+    grid.append(cell);
+  }
+  const legend = h('div', {class:'legend'}, [
+    h('span', null, [h('i', {style:`background:${st.bg}`}), txt(`이 항목의 기간 ${shortDate(s)} ~ ${shortDate(e)}`)]),
+    isParent ? h('span', null, [h('i', {class:'c', style:'background:var(--sub)'}), txt(`점 = 그날 진행되는 ${LEVELS[level + 1]}`)]) : null
+  ]);
+  return h('div', {class:'dsec'}, [nav, wd, grid, legend]);
+}
+
+function buildEdit(t, isParent){
+  const mkIn = (id, attrs) => h('input', Object.assign({id, class:'finput'}, attrs));
+  const nameI = mkIn('e-name', {type:'text', value:t.name, placeholder:'이름'});
+  const startI = mkIn('e-start', {type:'date', value:t.start});
+  const endI = mkIn('e-end', {type:'date', value:t.end});
+  const statusS = h('select', {id:'e-status', class:'finput'}, Object.keys(STATUS).map(k => {
+    const o = h('option', {value:k}, [txt(STATUS[k].label)]);
+    if(k === t.status) o.selected = true;
+    return o;
+  }));
+  const progI = mkIn('e-prog', {type:'number', min:'0', max:'100', value:String(t.progress ?? 0)});
+  if(isParent) [startI, endI, statusS, progI].forEach(x => { x.disabled = true; });
+  const err = h('div', {class:'ferr', role:'alert'});
+  const field = (label, input, id) => h('label', {class:'field', for:id}, [h('span', {class:'flabel'}, [txt(label)]), input]);
+  const el = h('div', {class:'dsec', style:'display:flex;flex-direction:column;gap:14px'}, [
+    field('이름', nameI, 'e-name'),
+    h('div', {class:'frow'}, [field('시작일', startI, 'e-start'), field('종료일', endI, 'e-end')]),
+    h('div', {class:'frow'}, [field('상태', statusS, 'e-status'), field('진행률 (%)', progI, 'e-prog')]),
+    isParent ? h('p', {class:'note'}, [txt('시작일·종료일·상태·진행률은 세부 항목에서 자동으로 계산되어 여기서는 바꿀 수 없습니다.')]) : null,
+    err
+  ]);
+  function save(){
+    if(!isParent){
+      if(!startI.value || !endI.value){ err.textContent = '시작일과 종료일을 입력해 주세요.'; return false; }
+      if(parse(endI.value) < parse(startI.value)){ err.textContent = '종료일이 시작일보다 빠릅니다. 날짜를 다시 확인해 주세요.'; return false; }
+      t.start = startI.value; t.end = endI.value; t.status = statusS.value;
+      let p = clamp(Math.round(Number(progI.value) || 0), 0, 100);
+      if(t.status === 'done') p = 100; else if(p === 100) t.status = 'done';
+      t.progress = p;
+    }
+    t.name = nameI.value.trim();
+    return true;
+  }
+  return { el, save, focus:() => { nameI.focus(); nameI.select(); } };
+}
+
+function renderDetail(){
+  const t = idx.id.get(detail.id);
+  if(!t){ closeDetail(); return; }
+  const level = levelOf(t), kids = kidsOf(t.id), isParent = kids.length > 0;
+  const st = STATUS[t.status] || STATUS.todo;
+
+  const path = [];
+  for(let p = idx.id.get(t.parent), g = 0; p && g < 5; p = idx.id.get(p.parent), g++) path.unshift(p);
+
+  const closeBtn = h('button', {class:'dclose', 'aria-label':'닫기', title:'닫기'}, [txt('×')]);
+  closeBtn.addEventListener('click', closeDetail);
+  const head = h('div', {class:'dh'}, [
+    h('div', {class:'dh-top'}, [h('span', {class:'lvl'}, [txt(LEVELS[level])]), h('span', {class:'spacer'}), closeBtn]),
+    path.length ? h('div', {class:'crumb'}, [txt(path.map(p => p.name || '(이름 없음)').join(' › '))]) : null,
+    h('h2', {class:'dtitle'}, [txt(t.name || '(이름 없음)')])
+  ]);
+
+  let tabs = null, body, foot;
+  const mkBtn = (label, cls) => h('button', {class:'btn' + (cls ? ' ' + cls : '')}, [txt(label)]);
+
+  if(detail.editing){
+    const f = buildEdit(t, isParent);
+    body = f.el;
+    const saveB = mkBtn('저장', 'primary'), cancelB = mkBtn('취소');
+    saveB.addEventListener('click', () => { if(f.save()){ detail.editing = false; persist(); render(); toast('저장했습니다.'); } });
+    cancelB.addEventListener('click', () => { detail.editing = false; renderDetail(); });
+    foot = h('div', {class:'df'}, [saveB, cancelB]);
+    queueMicrotask(f.focus);
+  } else {
+    tabs = h('div', {class:'dtabrow'}, [h('div', {class:'seg', role:'tablist'}, [['info', '정보'], ['cal', '달력']].map(([k, label]) => {
+      const b = h('button', {class:detail.tab === k ? 'on' : '', role:'tab', 'aria-selected':String(detail.tab === k)}, [txt(label)]);
+      b.addEventListener('click', () => { detail.tab = k; detail.confirm = false; renderDetail(); });
+      return b;
+    }))]);
+    body = detail.tab === 'cal'
+      ? h('div', {style:'display:flex;flex-direction:column;gap:18px'}, [calendarEl(t, kids, level, isParent), isParent ? kidList(kids, level) : null])
+      : infoView(t, st, level, kids, isParent);
+
+    if(detail.confirm){
+      const ds = descendants(t.id);
+      const msg = h('div', {class:'msg'}, [txt(`“${t.name || '(이름 없음)'}”을(를) 삭제할까요?` + (ds.length ? ` 안에 있는 ${ds.length}개 항목도 함께 삭제됩니다.` : ''))]);
+      const yes = mkBtn('삭제', 'danger'), no = mkBtn('취소');
+      yes.addEventListener('click', () => {
+        const gone = new Set([t.id, ...ds.map(d => d.id)]);
+        state.tasks = state.tasks.filter(k => !gone.has(k.id));
+        persist(); closeDetail(); render(); toast('삭제했습니다.');
+      });
+      no.addEventListener('click', () => { detail.confirm = false; renderDetail(); });
+      foot = h('div', {class:'df'}, [msg, yes, no]);
+    } else {
+      const editB = mkBtn('수정'), delB = mkBtn('삭제', 'ghost-danger');
+      editB.addEventListener('click', () => { detail.tab = 'info'; detail.editing = true; renderDetail(); });
+      delB.addEventListener('click', () => { detail.confirm = true; renderDetail(); });
+      foot = h('div', {class:'df'}, [editB, delB]);
+    }
+  }
+  drawer.replaceChildren(...[head, tabs, h('div', {class:'dbody'}, [body]), foot].filter(Boolean));
+}
+
+backdrop.addEventListener('click', closeDetail);
+
+/* ---------- 상단 버튼 ---------- */
+function scrollToToday(smooth){
+  const dw = ZOOM[state.zoom];
+  const x = (localToday() - view.start) * dw - 160;
+  scrollEl.scrollTo({ left: Math.max(0, x), behavior: smooth ? 'smooth' : 'auto' });
+}
+
+/* 일정 영역을 마우스로 잡아서 상하좌우로 이동 (터치는 손가락으로 밀면 기본 스크롤로 움직임) */
+let pan = null;
+scrollEl.addEventListener('mousedown', e => {
+  if(e.button === 0 && e.target.closest('.tl') && !e.target.closest('.bar')){
+    e.preventDefault();   // 끌 때 글자가 선택되지 않게
+    if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  }
+});
+scrollEl.addEventListener('pointerdown', e => {
+  if(e.pointerType === 'touch' || e.button !== 0) return;
+  if(!e.target.closest('.tl') || e.target.closest('.bar')) return;
+  pan = { x:e.clientX, y:e.clientY, l:scrollEl.scrollLeft, t:scrollEl.scrollTop, id:e.pointerId };
+  try{ scrollEl.setPointerCapture(e.pointerId); }catch(err){}
+  scrollEl.classList.add('panning');
+});
+scrollEl.addEventListener('pointermove', e => {
+  if(!pan) return;
+  scrollEl.scrollLeft = pan.l - (e.clientX - pan.x);
+  scrollEl.scrollTop = pan.t - (e.clientY - pan.y);
+});
+const endPan = () => { if(!pan) return; pan = null; scrollEl.classList.remove('panning'); };
+scrollEl.addEventListener('pointerup', endPan);
+scrollEl.addEventListener('pointercancel', endPan);
+
+$('add').addEventListener('click', () => addTask(null));
+$('filter').addEventListener('click', e => {
+  const b = e.target.closest('button[data-s]');
+  if(!b) return;
+  const s = b.dataset.s;
+  if(s === 'all') state.filter = [];
+  else if(state.filter.includes(s)) state.filter = state.filter.filter(x => x !== s);
+  else state.filter = [...state.filter, s];
+  persist(); render();
+});
+$('today').addEventListener('click', () => scrollToToday(true));
+$('expandAll').addEventListener('click', () => { state.tasks.forEach(t => t.collapsed = false); persist(); render(); });
+$('collapseAll').addEventListener('click', () => { reindex(); state.tasks.forEach(t => { t.collapsed = kidsOf(t.id).length > 0; }); persist(); render(); });
+
+document.querySelectorAll('#zoom button').forEach(b => b.addEventListener('click', () => {
+  if(state.zoom === b.dataset.z) return;
+  const oldDw = ZOOM[state.zoom];
+  const leftDay = view.start + scrollEl.scrollLeft / oldDw;
+  state.zoom = b.dataset.z;
+  persist(); render();
+  scrollEl.scrollLeft = Math.max(0, (leftDay - view.start) * ZOOM[state.zoom]);
+}));
+
+$('title').addEventListener('input', e => { state.title = e.target.value; document.title = state.title || '목행성 간트'; persist(); });
+
+/* ---------- 백업 / 복원 (다운로드 대신 복사·붙여넣기) ---------- */
+const panel = $('dataPanel'), dataText = $('dataText'), dataMsg = $('dataMsg');
+function say(msg, isErr){ dataMsg.textContent = msg; dataMsg.classList.toggle('err', !!isErr); }
+
+$('data').addEventListener('click', () => {
+  if(!panel.hidden){ panel.hidden = true; return; }
+  if(detail.id) closeDetail();
+  dataText.value = JSON.stringify(state, null, 2);
+  say('');
+  panel.hidden = false;
+});
+$('dataClose').addEventListener('click', () => { panel.hidden = true; });
+document.addEventListener('keydown', e => {
+  if(e.key !== 'Escape') return;
+  if(!drawer.hidden){
+    if(detail.editing){ detail.editing = false; renderDetail(); } else closeDetail();
+  } else if(!panel.hidden){ panel.hidden = true; }
+});
+
+$('dataCopy').addEventListener('click', () => {
+  const fallback = () => { dataText.focus(); dataText.select(); say('선택된 내용을 Ctrl+C(맥은 ⌘C)로 복사해 주세요.'); };
+  try{
+    navigator.clipboard.writeText(dataText.value).then(() => say('복사했습니다. 메모장 등에 붙여 넣어 보관하세요.'), fallback);
+  }catch(err){ fallback(); }
+});
+
+function applyImport(text){
+  try{
+    const data = JSON.parse(text);
+    if(!data || !Array.isArray(data.tasks)) throw new Error('형식 오류');
+    const list = data.tasks.filter(k => k && /^\d{4}-\d{2}-\d{2}$/.test(k.start) && /^\d{4}-\d{2}-\d{2}$/.test(k.end)).map(k => ({
+      id: String(k.id || uid()), parent: k.parent ? String(k.parent) : null, name: String(k.name || ''), start: k.start,
+      end: parse(k.end) < parse(k.start) ? k.start : k.end,
+      status: STATUS[k.status] ? k.status : 'todo',
+      progress: clamp(Number(k.progress) || 0, 0, 100),
+      collapsed: !!k.collapsed
+    }));
+    state.title = String(data.title || '목행성 간트');
+    state.zoom = ZOOM[data.zoom] ? data.zoom : 'day';
+    state.filter = [];
+    sanitize(list);
+    view.start = view.end = null;
+    $('title').value = state.title; document.title = state.title;
+    persist(); render(); scrollToToday(false);
+    say(`가져왔습니다. 항목 ${list.length}개`);
+  }catch(err){
+    say('가져오지 못했습니다. 이 앱에서 복사한 내용인지 확인해 주세요.', true);
+  }
+}
+$('dataApply').addEventListener('click', () => applyImport(dataText.value));
+$('dataFile').addEventListener('click', () => $('file').click());
+$('file').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if(!f) return;
+  try{ const t = await f.text(); dataText.value = t; applyImport(t); }
+  catch(err){ say('파일을 읽지 못했습니다.', true); }
+});
+
+/* 화면 폭이 바뀌면(휴대폰 ↔ 컴퓨터) 목록 폭을 다시 계산 */
+let ready = false;
+if(mq.addEventListener) mq.addEventListener('change', () => { if(ready) render(); });
+
+/* ---------- 시작 ---------- */
+(async function init(){
+  const saved = await storage.load();
+  if(saved && Array.isArray(saved.tasks)){
+    state = Object.assign(state, saved);
+    delete state.cols;      // 예전 버전의 열 너비 값은 쓰지 않음
+    sanitize(state.tasks.map(k => Object.assign({ parent:null, collapsed:false }, k)));
+  } else { state.tasks = sample(); }
+  if(!ZOOM[state.zoom]) state.zoom = 'day';
+  state.filter = Array.isArray(state.filter) ? state.filter.filter(s => STATUS[s]) : [];
+  state.colw = normColw(state.colw);
+  $('title').value = state.title; document.title = state.title || '목행성 간트';
+  render(); scrollToToday(false);
+  ready = true;
+})();
+
+})();
+</script>
+</body>
+</html>
