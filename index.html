@@ -17,6 +17,7 @@
   --st-doing-bg:#d3e5ef; --st-doing-fill:#8fc4e3; --st-doing-ink:#183347;
   --st-done-bg:#dbeddb;  --st-done-fill:#86c79b;  --st-done-ink:#1c3829;
   --st-hold-bg:#fadec9;  --st-hold-fill:#f0b98b;  --st-hold-ink:#49290e;
+  --kakao-bg:#fee500; --kakao-ink:#191919;
   --left:392px; --cols:260px 116px; --row:38px; --head:52px; --dw:36px;
 }
 @media (prefers-color-scheme: dark){
@@ -83,7 +84,10 @@ button,input,select,textarea{font:inherit;color:inherit}
 .seg button{border:0; background:var(--bg); padding:5px 12px; cursor:pointer}
 .seg button+button{border-left:1px solid var(--line)}
 .seg button.on{background:var(--hover); font-weight:600}
-.badge{font-size:11px; color:var(--sub); border:1px dashed var(--line); border-radius:999px; padding:2px 8px}
+.sync{font-size:12px; color:var(--sub); white-space:nowrap}
+.sync.err{color:var(--danger)}
+.who{display:inline-flex; align-items:center; gap:8px; font-size:12px; color:var(--sub)}
+.who .wn{max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .chips{display:inline-flex; gap:4px; flex-wrap:wrap}
 .chip{
   border:1px solid var(--line); background:var(--bg); border-radius:999px; padding:4px 10px;
@@ -294,9 +298,25 @@ button,input,select,textarea{font:inherit;color:inherit}
   background:var(--fg); color:var(--bg); border-radius:8px; padding:9px 14px; font-size:13px; box-shadow:0 6px 20px var(--shadow);
 }
 
+/* 로그인 화면 */
+.gate{position:fixed; inset:0; z-index:80; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:24px 16px; overflow:auto}
+.gcard{width:100%; max-width:360px; display:flex; flex-direction:column; gap:10px}
+.gcard h1{margin:0; font-size:28px}
+.gsub{margin:0 0 10px; color:var(--sub)}
+.gbtn{border:1px solid var(--line); background:var(--bg); border-radius:8px; padding:12px 14px; cursor:pointer; font-weight:600}
+.gbtn:hover{background:var(--hover)}
+.gbtn.kakao{background:var(--kakao-bg); border-color:var(--kakao-bg); color:var(--kakao-ink)}
+.gbtn.kakao:hover{background:var(--kakao-bg); filter:brightness(.96)}
+.gbtn[disabled]{opacity:.6; cursor:default}
+.gmail summary{cursor:pointer; color:var(--sub); padding:6px 0}
+.gform{display:flex; flex-direction:column; gap:8px; padding-top:4px}
+.ginput{border:1px solid var(--line); background:var(--bg); border-radius:6px; padding:10px; width:100%}
+.gerr{min-height:18px; margin:0; color:var(--danger); font-size:13px}
+.glocal{color:var(--sub); font-size:12px; text-align:center}
+
 /* 좁은 화면 */
 @media (max-width:720px){
-  .badge{display:none}
+  .who .wn{display:none}
   .ab.txt{padding:0 6px}
 }
 </style>
@@ -306,7 +326,8 @@ button,input,select,textarea{font:inherit;color:inherit}
 <div class="toolbar">
   <input class="title" id="title" value="목행성 간트" aria-label="제목">
   <span class="spacer"></span>
-  <span class="badge">노션 · 구글 캘린더 연동 준비 중</span>
+  <span class="sync" id="sync" role="status" aria-live="polite"></span>
+  <span class="who" id="who" hidden><span class="wn" id="whoName"></span><button class="btn" id="logout">로그아웃</button></span>
   <div class="chips" id="filter" role="group" aria-label="상태 필터"></div>
   <div class="seg" id="zoom">
     <button data-z="day">일</button>
@@ -322,6 +343,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 
 <div class="panel" id="dataPanel" role="dialog" aria-label="백업 / 복원" hidden>
   <p>아래 내용을 복사해 메모장 등에 저장해 두면 백업이 됩니다. 저장해 둔 내용을 붙여 넣고 “가져오기”를 누르면 복원됩니다.</p>
+  <p class="pmsg" id="dataNote" hidden>로그인한 상태에서는 가져온 내용으로 이 계정의 목행성이 바뀝니다.</p>
   <textarea id="dataText" spellcheck="false" aria-label="백업 데이터"></textarea>
   <div class="pbtns">
     <button class="btn" id="dataCopy">복사</button>
@@ -339,6 +361,25 @@ button,input,select,textarea{font:inherit;color:inherit}
 <div class="backdrop" id="backdrop" hidden></div>
 <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="세부 사항" tabindex="-1" hidden></aside>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<div class="gate" id="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle" hidden>
+  <div class="gcard">
+    <h1 id="gateTitle">목행성</h1>
+    <p class="gsub">목표 · 실행 · 성찰</p>
+    <button class="gbtn kakao" id="loginKakao" type="button">카카오로 시작하기</button>
+    <button class="gbtn" id="loginGoogle" type="button">Google로 시작하기</button>
+    <details class="gmail" id="gmail">
+      <summary>이메일로 로그인</summary>
+      <form class="gform" id="mailForm">
+        <input class="ginput" id="mailEmail" type="email" autocomplete="username" placeholder="이메일" aria-label="이메일" required>
+        <input class="ginput" id="mailPass" type="password" autocomplete="current-password" placeholder="비밀번호" aria-label="비밀번호" required>
+        <button class="gbtn" id="mailGo" type="submit">로그인</button>
+      </form>
+    </details>
+    <p class="gerr" id="gateErr" role="alert"></p>
+    <a class="glocal" id="gateLocal" href="?local=1">로그인 없이 이 기기에서만 써보기</a>
+  </div>
+</div>
 
 <script>
 (function(){
@@ -413,17 +454,252 @@ const STATUS = {
 const ZOOM = { day:36, week:16, month:5 };
 
 /* ---------- 저장소 어댑터 ----------
-   지금은 브라우저(localStorage)에 저장합니다.
-   나중에 Cloudflare Worker(D1/KV) API로 바꿀 때 이 객체만 교체하면 됩니다. */
-const storage = {
-  key:'gantt.v2',
+   · 로그인한 상태: 굿게임에듀 회원 서비스(/api/account)에 저장 → 어느 기기에서 열어도 같은 내용
+   · 로그인 서비스가 없는 곳(미리보기 등)이나 “로그인 없이 써보기”: 이 브라우저(localStorage)에만 저장 */
+const API = '/api/account';
+const $ = id => document.getElementById(id);
+
+function setSync(kind){
+  const el = $('sync'); if(!el) return;
+  const T = { local:'이 기기에만 저장', saving:'저장 중…', saved:'저장됨', error:'저장하지 못했습니다. 다시 시도합니다…',
+              expired:'로그인이 끝났습니다. 새로고침 후 다시 로그인해 주세요.' };
+  el.textContent = T[kind] || '';
+  el.classList.toggle('err', kind === 'error' || kind === 'expired');
+}
+
+const localStore = {
+  key:'gantt.v2', delay:150,
   async load(){ try{ const r = localStorage.getItem(this.key); return r ? JSON.parse(r) : null; }catch(e){ return null; } },
-  async save(data){ try{ localStorage.setItem(this.key, JSON.stringify(data)); }catch(e){} }
+  async save(data){ try{ localStorage.setItem(this.key, JSON.stringify(data)); }catch(e){} },
+  synced(){ setSync('local'); },
+  dirty(){ return false; }
 };
+
+/* 서버 저장: 굿게임에듀 회원 서비스의 “성장(growth)” 기능을 그대로 사용합니다.
+   목행성 = 프로젝트, 꿈일 = 꿈(dream), 세부 꿈일 = 꿈 아래의 꿈.
+   서버에 칸이 없는 값(진행률·접힘·화면 설정)은 같은 계정의 설정 저장 칸(order)에 함께 보관합니다. */
+const KST = new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Seoul', year:'numeric', month:'2-digit', day:'2-digit' });
+const kstDay = iso => { const d = new Date(iso); return isNaN(d.getTime()) ? null : KST.format(d); };
+const toStart = s => new Date(s + 'T00:00:00+09:00').toISOString();
+const toEnd = s => new Date(s + 'T23:59:59+09:00').toISOString();
+const isDay = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+
+const serverStore = (function(){
+  const S2L = { '진행':'doing', '중단':'hold', '완료':'done', '예정':'todo' };
+  const L2S = { doing:'진행', hold:'중단', done:'완료', todo:'예정' };
+  const COLOR = '#278a73';
+  const GROWTH = '/v1/growth/';
+  let map = new Map();            // 화면의 항목 id → 서버 기록 { kind:'p'|'d', sid, projectLid, srvStatus, note, color }
+  let last = new Map();           // 화면의 항목 id → 서버와 맞춘 마지막 값
+  let order = {}, metaSig = '';
+  let statusOk = new Set(['진행', '중단', '완료']);
+  let busy = false, queued = null, latest = null, retry = null, stopped = false, failed = false;
+
+  const fail = r => Object.assign(new Error('http ' + r.status), { status:r.status });
+  async function call(method, path, body){
+    const r = await fetch(API + path, {
+      method, credentials:'same-origin',
+      headers: body === undefined ? { Accept:'application/json' } : { Accept:'application/json', 'Content-Type':'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+    let data = null;
+    try{ data = await r.json(); }catch(e){}
+    return { ok:r.ok, status:r.status, data };
+  }
+
+  const snap = t => ({ parent:t.parent || null, name:t.name || '', start:t.start, end:t.end, status:t.status });
+  const same = (a, b) => a.name === b.name && a.start === b.start && a.end === b.end && a.status === b.status;
+
+  async function load(){
+    const r = await call('GET', GROWTH + 'bootstrap');
+    if(!r.ok || !r.data) throw fail(r);
+    const d = r.data;
+    order = (d.order && typeof d.order === 'object' && !Array.isArray(d.order)) ? d.order : {};
+    (d.statusOptions || []).forEach(n => statusOk.add(n));
+    const g = (order.gantt && typeof order.gantt === 'object') ? order.gantt : {};
+    const meta = (g.meta && typeof g.meta === 'object') ? g.meta : {};
+    const ui = (g.ui && typeof g.ui === 'object') ? g.ui : {};
+
+    map = new Map();
+    const tasks = [];
+    const dreams = d.dreams || [];
+    const dreamIds = new Set(dreams.map(x => x.id));
+    const kids = new Map();
+    dreams.forEach(x => {
+      const pl = (x.parent_id && dreamIds.has(x.parent_id)) ? 'd' + x.parent_id : 'p' + x.project_id;
+      if(!kids.has(pl)) kids.set(pl, []);
+      kids.get(pl).push(x);
+    });
+    const today = localToday();
+    const walk = pl => (kids.get(pl) || []).forEach(x => {
+      const lid = 'd' + x.id, m = meta[lid] || {};
+      const st = S2L[x.status] || 'todo';
+      let s = kstDay(x.starts_at), e = kstDay(x.ends_at);
+      if(!s) s = fmt(today);
+      if(!e || e < s) e = s;
+      const pr = st === 'done' ? 100 : clamp(Math.round(Number(m.p) || 0), 0, 99);
+      tasks.push({ id:lid, parent:pl, name:x.title, start:s, end:e, status:st, progress:pr, collapsed:!!m.c });
+      map.set(lid, { kind:'d', sid:x.id, projectLid:'p' + x.project_id, srvStatus:x.status, note:x.note || '' });
+      walk(lid);
+    });
+    (d.projects || []).forEach(p => {
+      const lid = 'p' + p.id, m = meta[lid] || {};
+      const s = isDay(m.s) ? m.s : fmt(today);
+      const e = (isDay(m.e) && m.e >= s) ? m.e : fmt(parse(s) + 6);
+      const st = STATUS[m.t] ? m.t : 'todo';
+      const pr = st === 'done' ? 100 : clamp(Math.round(Number(m.p) || 0), 0, 99);
+      tasks.push({ id:lid, parent:null, name:p.name, start:s, end:e, status:st, progress:pr, collapsed:!!m.c });
+      map.set(lid, { kind:'p', sid:p.id, color:p.color || COLOR });
+      walk(lid);
+    });
+    return { title: (typeof ui.title === 'string' && ui.title) ? ui.title : '목행성 간트', zoom:ui.zoom, filter:ui.filter, colw:ui.colw, tasks };
+  }
+
+  /* 서버에 칸이 없는 값(진행률·접힘·목행성 기간·화면 설정) */
+  function ganttMeta(st){
+    const parents = new Set();
+    st.tasks.forEach(t => { if(t.parent) parents.add(t.parent); });
+    const meta = {};
+    st.tasks.forEach(t => {
+      const rec = map.get(t.id); if(!rec) return;
+      const leaf = !parents.has(t.id), o = {};
+      if(leaf && t.status !== 'done' && t.progress) o.p = t.progress;
+      if(t.collapsed) o.c = 1;
+      if(rec.kind === 'p' && leaf){ o.s = t.start; o.e = t.end; o.t = t.status; }
+      if(Object.keys(o).length) meta[rec.kind + rec.sid] = o;
+    });
+    return { ui:{ title:st.title, zoom:st.zoom, filter:st.filter, colw:st.colw }, meta };
+  }
+
+  async function ensureStatus(name){
+    if(statusOk.has(name)) return;
+    const r = await call('POST', GROWTH + 'status-options', { name });
+    if(r.status === 201 || r.status === 409){ statusOk.add(name); return; }
+    throw fail(r);
+  }
+  async function statusFor(s, rec){
+    if(rec && rec.srvStatus && (S2L[rec.srvStatus] || 'todo') === s.status) return rec.srvStatus;   // 예전 앱의 다른 상태 이름은 그대로 둠
+    const name = L2S[s.status] || '예정';
+    await ensureStatus(name);
+    return name;
+  }
+
+  async function run(st){
+    const cur = new Map(st.tasks.map(t => [t.id, t]));
+
+    /* 1) 삭제 */
+    const removed = [...last.keys()].filter(id => !cur.has(id));
+    const gone = new Set(removed);
+    for(const id of removed){
+      const rec = map.get(id), p = last.get(id).parent;
+      if(rec && !(p && gone.has(p))){          // 상위 항목이 함께 지워지면 서버가 안의 항목까지 지움
+        const r = await call('DELETE', GROWTH + (rec.kind === 'p' ? 'projects/' : 'dreams/') + rec.sid);
+        if(!(r.ok || r.status === 404)) throw fail(r);
+      }
+      last.delete(id); map.delete(id);
+    }
+
+    /* 2) 새로 만든 항목 (상위 항목부터) */
+    const depth = t => { let n = 0, p = t.parent, g = 0; while(p && g++ < 6){ n++; const q = cur.get(p); p = q ? q.parent : null; } return n; };
+    const fresh = st.tasks.filter(t => !map.has(t.id)).sort((a, b) => depth(a) - depth(b));
+    for(const t of fresh){
+      const s = snap(t), name = s.name.trim();
+      if(!t.parent){
+        const r = await call('POST', GROWTH + 'projects', { name:(name || '새 목행성').slice(0, 120), color:COLOR });
+        if(r.status !== 201 || !r.data) throw fail(r);
+        map.set(t.id, { kind:'p', sid:r.data.id, color:COLOR });
+      } else {
+        const pr = map.get(t.parent);
+        if(!pr) throw Object.assign(new Error('parent'), { status:0 });
+        const projectLid = pr.kind === 'p' ? t.parent : pr.projectLid;
+        const proj = map.get(projectLid);
+        if(!proj) throw Object.assign(new Error('project'), { status:0 });
+        const status = await statusFor(s, null);
+        const r = await call('POST', GROWTH + 'dreams', {
+          projectId:proj.sid, parentId: pr.kind === 'd' ? pr.sid : null,
+          title:(name || '(이름 없음)').slice(0, 200), startsAt:toStart(s.start), endsAt:toEnd(s.end), note:'', status
+        });
+        if(r.status !== 201 || !r.data) throw fail(r);
+        map.set(t.id, { kind:'d', sid:r.data.id, projectLid, srvStatus:status, note:'' });
+      }
+      last.set(t.id, s);
+    }
+
+    /* 3) 바뀐 항목 */
+    for(const t of st.tasks){
+      const prev = last.get(t.id), rec = map.get(t.id);
+      if(!prev || !rec) continue;
+      const s = snap(t);
+      if(same(prev, s)) continue;
+      const name = s.name.trim();
+      if(rec.kind === 'p'){
+        if(prev.name !== s.name){
+          const r = await call('PATCH', GROWTH + 'projects/' + rec.sid, { name:(name || '새 목행성').slice(0, 120), color:rec.color || COLOR });
+          if(!r.ok) throw fail(r);
+        }
+      } else {
+        const status = await statusFor(s, rec);
+        const r = await call('PATCH', GROWTH + 'dreams/' + rec.sid, {
+          title:(name || '(이름 없음)').slice(0, 200), startsAt:toStart(s.start), endsAt:toEnd(s.end), note:rec.note || '', status
+        });
+        if(!r.ok) throw fail(r);
+        rec.srvStatus = status;
+      }
+      last.set(t.id, s);
+    }
+
+    /* 4) 진행률·접힘·화면 설정 */
+    const g = ganttMeta(st), sig = JSON.stringify(g);
+    if(sig !== metaSig){
+      const body = Object.assign({}, order, { gantt:g });
+      if(JSON.stringify(body).length <= 45000){
+        const r = await call('PUT', GROWTH + 'order', body);
+        if(!r.ok) throw fail(r);
+        order = body;
+      }
+      metaSig = sig;
+    }
+  }
+
+  async function kick(){
+    busy = true; clearTimeout(retry);
+    try{
+      while(queued){
+        const st = queued; queued = null;
+        setSync('saving');
+        await run(st);
+      }
+      failed = false; setSync('saved');
+    }catch(e){
+      if(e && (e.status === 401 || e.status === 403)){ stopped = true; setSync('expired'); }
+      else {
+        failed = true; setSync('error');
+        retry = setTimeout(() => { failed = false; if(latest && !stopped){ queued = latest; kick(); } }, 6000);
+      }
+    }finally{
+      busy = false;
+      if(queued && !stopped && !failed) kick();
+    }
+  }
+
+  return {
+    delay:700,
+    load,
+    save(st){ latest = st; queued = st; if(!busy && !stopped) kick(); },
+    synced(st){
+      latest = st;
+      last = new Map(st.tasks.map(t => [t.id, snap(t)]));
+      metaSig = JSON.stringify(ganttMeta(st));
+      setSync('saved');
+    },
+    dirty(){ return busy || !!queued || failed; }
+  };
+})();
+
+let storage = localStore;
 
 let state = { title:'목행성 간트', zoom:'day', filter:[], colw:normColw(), tasks:[] };
 const view = { start:null, end:null };
-const $ = id => document.getElementById(id);
 const scrollEl = $('scroll'), inner = $('inner');
 const drawer = $('drawer'), backdrop = $('backdrop');
 const uid = () => Math.random().toString(36).slice(2,9);
@@ -541,7 +817,7 @@ function sample(){
 let saveTimer = null;
 function persist(){
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => storage.save(state), 150);
+  saveTimer = setTimeout(() => storage.save(state), storage.delay || 150);
 }
 
 /* ---------- DOM 헬퍼 ---------- */
@@ -1137,21 +1413,111 @@ $('file').addEventListener('change', async e => {
 let ready = false;
 if(mq.addEventListener) mq.addEventListener('change', () => { if(ready) render(); });
 
-/* ---------- 시작 ---------- */
-(async function init(){
-  const saved = await storage.load();
+/* ---------- 로그인 창 ---------- */
+const gate = $('gate'), gateErr = $('gateErr');
+function showGate(msg, opts){
+  opts = opts || {};
+  gateErr.textContent = msg || '';
+  $('gmail').hidden = !!opts.noMail;
+  gate.hidden = false;
+}
+async function startSocial(provider){
+  gateErr.textContent = '';
+  const cb = location.origin + '/';
+  const url = API + '/v1/auth/start/' + provider + '?callbackURL=' + encodeURIComponent(cb);
+  try{
+    const r = await fetch(url, { redirect:'manual', credentials:'same-origin' });
+    if(r.type !== 'opaqueredirect' && r.status >= 400){
+      const t = await r.text().catch(() => '');
+      gateErr.textContent = /untrusted_callback_url|invalid_callback/i.test(t)
+        ? '이 주소는 아직 로그인이 허용되지 않았습니다. 관리자에게 주소 등록을 요청해 주세요.'
+        : '로그인을 시작하지 못했습니다. 잠시 뒤 다시 눌러 주세요.';
+      return;
+    }
+  }catch(e){ /* 사전 확인이 막혀도 실제 이동은 시도 */ }
+  location.href = url;
+}
+$('loginKakao').addEventListener('click', () => startSocial('kakao'));
+$('loginGoogle').addEventListener('click', () => startSocial('google'));
+$('mailForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  gateErr.textContent = ''; $('mailGo').disabled = true;
+  try{
+    const r = await fetch(API + '/api/auth/sign-in/email', {
+      method:'POST', credentials:'same-origin',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ email:$('mailEmail').value.trim(), password:$('mailPass').value })
+    });
+    if(r.ok) { location.reload(); return; }
+    gateErr.textContent = (r.status === 401 || r.status === 400 || r.status === 422)
+      ? '이메일 또는 비밀번호가 맞지 않습니다.' : '로그인하지 못했습니다. 잠시 뒤 다시 시도해 주세요.';
+  }catch(err){ gateErr.textContent = '인터넷 연결을 확인해 주세요.'; }
+  $('mailGo').disabled = false;
+});
+$('logout').addEventListener('click', async () => {
+  if(storage.dirty && storage.dirty() && !confirm('아직 저장되지 않은 변경이 있습니다. 그래도 로그아웃할까요?')) return;
+  try{ await fetch(API + '/api/auth/sign-out', { method:'POST', credentials:'same-origin', headers:{ 'Content-Type':'application/json' }, body:'{}' }); }catch(e){}
+  location.reload();
+});
+window.addEventListener('beforeunload', e => {
+  if(storage.dirty && storage.dirty()){ e.preventDefault(); e.returnValue = ''; }
+});
+
+/* 로그인 상태 확인: 'server' | 'login' | 'local' */
+async function detectMode(){
+  if(/[?&]local=1\b/.test(location.search)) return { mode:'local' };
+  try{
+    const r = await fetch(API + '/v1/me', { credentials:'same-origin', headers:{ Accept:'application/json' } });
+    if(r.status === 401 || r.status === 403) return { mode:'login' };
+    if(r.ok){
+      let d = null;
+      try{ d = await r.json(); }catch(e){}
+      if(d && d.user) return { mode:'server', user:d.user };
+      if(d && d.authenticated === false) return { mode:'login' };
+    }
+  }catch(e){}
+  return { mode:'local' };   // 서버가 없는 곳(내 컴퓨터에서 파일로 열 때 등)
+}
+
+function applyLoaded(saved){
   if(saved && Array.isArray(saved.tasks)){
     state = Object.assign(state, saved);
     delete state.cols;      // 예전 버전의 열 너비 값은 쓰지 않음
     sanitize(state.tasks.map(k => Object.assign({ parent:null, collapsed:false }, k)));
-  } else { state.tasks = sample(); }
+    return true;
+  }
+  return false;
+}
+
+async function boot(){
+  const m = await detectMode();
+  if(m.mode === 'login'){ showGate(new URLSearchParams(location.search).get('error') ? '로그인하지 못했습니다. 다시 시도해 주세요.' : ''); return; }
+  if(m.mode === 'server'){
+    storage = serverStore;
+    const u = m.user || {};
+    $('whoName').textContent = u.name || u.email || '내 계정';
+    $('who').hidden = false; $('dataNote').hidden = false;
+    let saved;
+    try{ saved = await serverStore.load(); }
+    catch(e){
+      if(e && (e.status === 401 || e.status === 403)) { showGate('로그인이 끝났습니다. 다시 로그인해 주세요.'); return; }
+      showGate('내 목행성을 불러오지 못했습니다. 잠시 뒤 다시 시도해 주세요.', { noMail:true });
+      $('gateLocal').textContent = '다시 불러오기'; $('gateLocal').href = location.pathname;
+      return;
+    }
+    applyLoaded(saved);
+  } else {
+    if(!applyLoaded(await localStore.load())) state.tasks = sample();
+  }
   if(!ZOOM[state.zoom]) state.zoom = 'day';
   state.filter = Array.isArray(state.filter) ? state.filter.filter(s => STATUS[s]) : [];
   state.colw = normColw(state.colw);
   $('title').value = state.title; document.title = state.title || '목행성 간트';
   render(); scrollToToday(false);
   ready = true;
-})();
+  if(storage.synced) storage.synced(state);
+}
+boot();
 
 })();
 </script>
