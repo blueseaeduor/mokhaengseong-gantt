@@ -314,6 +314,37 @@ button,input,select,textarea{font:inherit;color:inherit}
 .gerr{min-height:18px; margin:0; color:var(--danger); font-size:13px}
 .glocal{color:var(--sub); font-size:12px; text-align:center}
 
+
+/* 캘린더 보기 */
+#cal{flex:1; min-height:0; overflow:auto; padding:8px 16px 16px}
+.mcnav{display:flex; align-items:center; gap:8px; padding:4px 0 10px}
+.mcnav .mcl{font-size:16px; font-weight:700; min-width:110px; text-align:center}
+.mcgrid{border:1px solid var(--line); border-radius:8px; overflow:hidden; min-width:560px}
+.mcdow{display:grid; grid-template-columns:repeat(7,1fr); background:var(--surface); border-bottom:1px solid var(--line)}
+.mcdow div{padding:6px 8px; font-size:12px; color:var(--sub); text-align:left}
+.mcdow div.we{color:var(--weekend-text)}
+.mcweek{position:relative; display:grid; grid-template-columns:repeat(7,1fr); border-bottom:1px solid var(--line)}
+.mcweek:last-child{border-bottom:0}
+.mcday{border-right:1px solid var(--grid); padding:3px 6px; font-size:12px; color:var(--sub); min-height:84px}
+.mcday:last-child{border-right:0}
+.mcday.we{background:var(--weekend)}
+.mcday.out{color:var(--weekend-text)}
+.mcday .mcdn{display:inline-block; min-width:20px; height:20px; line-height:20px; text-align:center; border-radius:10px}
+.mcday.today .mcdn{background:var(--today); color:#fff; font-weight:700}
+.mcev{position:absolute; height:18px; line-height:18px; font-size:12px; padding:0 6px; border:0; text-align:left;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; box-sizing:border-box}
+.mcev:hover{filter:brightness(.96); box-shadow:0 0 0 1.5px var(--ring)}
+.mcev.cs{border-top-left-radius:5px; border-bottom-left-radius:5px}
+.mcev.ce{border-top-right-radius:5px; border-bottom-right-radius:5px}
+.mcev.done{text-decoration:line-through; opacity:.8}
+.mcempty{padding:28px 0; text-align:center; color:var(--sub)}
+@media (max-width:720px){
+  #cal{padding:6px 8px 12px}
+  .mcgrid{min-width:0}
+  .mcday{min-height:64px; padding:2px 3px}
+  .mcev{font-size:11px; padding:0 3px}
+}
+
 /* 좁은 화면 */
 @media (max-width:720px){
   .who .wn{display:none}
@@ -329,6 +360,10 @@ button,input,select,textarea{font:inherit;color:inherit}
   <span class="sync" id="sync" role="status" aria-live="polite"></span>
   <span class="who" id="who" hidden><span class="wn" id="whoName"></span><button class="btn" id="logout">로그아웃</button></span>
   <div class="chips" id="filter" role="group" aria-label="상태 필터"></div>
+  <div class="seg" id="mode" role="group" aria-label="보기 방식">
+    <button data-m="gantt">간트</button>
+    <button data-m="cal">캘린더</button>
+  </div>
   <div class="seg" id="zoom">
     <button data-z="day">일</button>
     <button data-z="week">주</button>
@@ -357,6 +392,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 </div>
 
 <div id="scroll"><div id="inner"></div></div>
+<div id="cal" hidden></div>
 
 <div class="backdrop" id="backdrop" hidden></div>
 <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="세부 사항" tabindex="-1" hidden></aside>
@@ -842,6 +878,80 @@ function toast(msg){
   toastTimer = setTimeout(() => { el.hidden = true; }, 2600);
 }
 
+/* ---------- 캘린더 보기 ---------- */
+let mode = 'gantt';
+try{ if(localStorage.getItem('gantt.mode') === 'cal') mode = 'cal'; }catch(e){}
+const calM = (() => { const m = monthOf(localToday()); return { y:m.y, m:m.m }; })();
+function calShift(n){ const d = new Date(Date.UTC(calM.y, calM.m + n, 1)); calM.y = d.getUTCFullYear(); calM.m = d.getUTCMonth(); }
+function pathOf(t){
+  const names = []; let c = t, g = 0;
+  while(c && g++ < 6){ names.unshift(c.name || '(이름 없음)'); c = c.parent ? idx.id.get(c.parent) : null; }
+  return names.join(' › ');
+}
+function renderCal(){
+  const box = $('cal');
+  box.replaceChildren();
+  const first = Math.floor(Date.UTC(calM.y, calM.m, 1) / DAY);
+  const last = Math.floor(Date.UTC(calM.y, calM.m + 1, 0) / DAY);
+  const gs = alignMonday(first), ge = alignMonday(last) + 6;
+  const today = localToday();
+
+  const nav = h('div', {class:'mcnav'}, [
+    h('button', {class:'btn', id:'calPrev', 'aria-label':'이전 달'}, [txt('‹')]),
+    h('span', {class:'mcl', role:'status'}, [txt(`${calM.y}년 ${calM.m + 1}월`)]),
+    h('button', {class:'btn', id:'calNext', 'aria-label':'다음 달'}, [txt('›')])
+  ]);
+  box.append(nav);
+  nav.querySelector('#calPrev').addEventListener('click', () => { calShift(-1); renderCal(); });
+  nav.querySelector('#calNext').addEventListener('click', () => { calShift(1); renderCal(); });
+
+  /* 가장 세부 항목(자식이 없는 항목)만 날짜에 올림. 상위 항목은 이름 위에 마우스를 올리면 경로로 보임 */
+  const items = state.tasks.filter(t => kidsOf(t.id).length === 0 && matchesFilter(t))
+    .map(t => ({ t, s:parse(t.start), e:parse(t.end) }))
+    .filter(x => x.e >= gs && x.s <= ge)
+    .sort((a, b) => a.s - b.s || (b.e - b.s) - (a.e - a.s));
+
+  const grid = h('div', {class:'mcgrid'});
+  const dow = h('div', {class:'mcdow'});
+  WD.forEach((w, i) => dow.append(h('div', {class: i >= 5 ? 'we' : ''}, [txt(w)])));
+  grid.append(dow);
+
+  for(let ws = gs; ws <= ge; ws += 7){
+    const week = h('div', {class:'mcweek'});
+    for(let i = 0; i < 7; i++){
+      const n = ws + i, d = new Date(n * DAY);
+      const cls = 'mcday' + (i >= 5 ? ' we' : '') + (d.getUTCMonth() !== calM.m ? ' out' : '') + (n === today ? ' today' : '');
+      week.append(h('div', {class:cls}, [h('span', {class:'mcdn'}, [txt(String(d.getUTCDate()))])]));
+    }
+    /* 이 주에 걸친 일정을 칸(줄)에 배치 */
+    const laneEnd = [];
+    items.filter(x => x.e >= ws && x.s <= ws + 6).forEach(x => {
+      const a = Math.max(x.s, ws), b = Math.min(x.e, ws + 6);
+      let lane = laneEnd.findIndex(end => end < a);
+      if(lane < 0){ lane = laneEnd.length; laneEnd.push(b); } else laneEnd[lane] = b;
+      const st = STATUS[x.t.status] || STATUS.todo;
+      const ev = h('button', {
+        type:'button',
+        class:'mcev' + (x.s >= ws ? ' cs' : '') + (x.e <= ws + 6 ? ' ce' : '') + (x.t.status === 'done' ? ' done' : ''),
+        style:`left:calc(${(a - ws) / 7 * 100}% + 2px);width:calc(${(b - a + 1) / 7 * 100}% - 4px);top:${26 + lane * 20}px;background:${st.bg};color:${st.ink}`,
+        title:`${pathOf(x.t)}\n${shortDate(x.s)} ~ ${shortDate(x.e)} · ${st.label}`
+      }, [txt(x.t.name || '(이름 없음)')]);
+      ev.addEventListener('click', () => openDetail(x.t));
+      week.append(ev);
+    });
+    week.style.minHeight = (26 + Math.max(laneEnd.length, 3) * 20 + 6) + 'px';
+    grid.append(week);
+  }
+  box.append(grid);
+  if(!items.length) box.append(h('div', {class:'mcempty'}, [txt(state.tasks.length ? '이 달에 보일 일정이 없습니다.' : '아직 일정이 없습니다. 위의 “+ 목행성 추가”로 시작해 보세요.')]));
+}
+function applyMode(){
+  const cal = mode === 'cal';
+  $('scroll').hidden = cal; $('cal').hidden = !cal;
+  ['zoom', 'expandAll', 'collapseAll'].forEach(id => { $(id).hidden = cal; });
+  document.querySelectorAll('#mode button').forEach(b => b.classList.toggle('on', b.dataset.m === mode));
+}
+
 /* ---------- 렌더 ---------- */
 function ensureRange(){
   const t = localToday();
@@ -860,6 +970,8 @@ function ensureRange(){
 
 function render(){
   recompute();
+  applyMode();
+  if(mode === 'cal'){ renderFilter(); renderCal(); return; }
   const dw = ZOOM[state.zoom];
   const shift = ensureRange();
   const days = view.end - view.start + 1;
@@ -1336,7 +1448,17 @@ $('filter').addEventListener('click', e => {
   else state.filter = [...state.filter, s];
   persist(); render();
 });
-$('today').addEventListener('click', () => scrollToToday(true));
+$('today').addEventListener('click', () => {
+  if(mode === 'cal'){ const m = monthOf(localToday()); calM.y = m.y; calM.m = m.m; renderCal(); }
+  else scrollToToday(true);
+});
+document.querySelectorAll('#mode button').forEach(b => b.addEventListener('click', () => {
+  if(mode === b.dataset.m) return;
+  mode = b.dataset.m;
+  try{ localStorage.setItem('gantt.mode', mode); }catch(e){}
+  render();
+  if(mode === 'gantt') scrollToToday(false);
+}));
 $('expandAll').addEventListener('click', () => { state.tasks.forEach(t => t.collapsed = false); persist(); render(); });
 $('collapseAll').addEventListener('click', () => { reindex(); state.tasks.forEach(t => { t.collapsed = kidsOf(t.id).length > 0; }); persist(); render(); });
 
