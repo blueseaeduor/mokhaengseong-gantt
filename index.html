@@ -262,7 +262,9 @@ body.reordering, body.reordering *{cursor:grabbing !important; user-select:none}
 .pill{display:inline-block; font-size:12px; font-weight:600; border-radius:999px; padding:2px 10px; white-space:nowrap}
 .info{display:grid; grid-template-columns:64px minmax(0,1fr); gap:12px 12px; margin:0; align-items:center}
 .info dt{color:var(--sub); font-size:13px}
-.info dd{margin:0; min-width:0; overflow-wrap:anywhere}
+.info dd{margin:0; min-width:0; overflow-wrap:anywhere; white-space:pre-wrap}
+.info{grid-template-columns:72px minmax(0,1fr)}
+textarea.finput{resize:vertical; line-height:1.5}
 .prog{display:flex; align-items:center; gap:10px}
 .pbar{flex:1; height:8px; border-radius:999px; background:var(--st-todo-bg); overflow:hidden}
 .pbar i{display:block; height:100%; border-radius:999px}
@@ -523,6 +525,18 @@ function setSync(kind){
   el.classList.toggle('err', kind === 'error' || kind === 'expired');
 }
 
+/* 노션식 속성: 우선순위(r)·담당(w)·소요시간(h)·마음(a)·성찰(f)·메모(m) */
+const PRIO = { high:'높음', mid:'보통', low:'낮음' };
+const XCAP = { w:40, h:30, a:300, f:1000, m:1000 };
+function cleanX(o){
+  const x = {};
+  if(!o || typeof o !== 'object') return null;
+  if(PRIO[o.r]) x.r = o.r;
+  Object.keys(XCAP).forEach(k => { const v = typeof o[k] === 'string' ? o[k].trim().slice(0, XCAP[k]) : ''; if(v) x[k] = v; });
+  return Object.keys(x).length ? x : null;
+}
+const withX = (task, o) => { const x = cleanX(o); if(x) task.x = x; return task; };
+
 const localStore = {
   key:'gantt.v2', delay:150,
   async load(){ try{ const r = localStorage.getItem(this.key); return r ? JSON.parse(r) : null; }catch(e){ return null; } },
@@ -598,7 +612,7 @@ const serverStore = (function(){
       if(!s) s = fmt(today);
       if(!e || e < s) e = s;
       const pr = st === 'done' ? 100 : clamp(Math.round(Number(m.p) || 0), 0, 99);
-      tasks.push({ id:lid, parent:pl, name:x.title, start:s, end:e, status:st, progress:pr, collapsed:!!m.c });
+      tasks.push(withX({ id:lid, parent:pl, name:x.title, start:s, end:e, status:st, progress:pr, collapsed:!!m.c }, m.x));
       map.set(lid, { kind:'d', sid:x.id, projectLid:'p' + x.project_id, srvStatus:x.status, note:x.note || '' });
       walk(lid);
     });
@@ -608,7 +622,7 @@ const serverStore = (function(){
       const e = (isDay(m.e) && m.e >= s) ? m.e : fmt(parse(s) + 6);
       const st = STATUS[m.t] ? m.t : 'todo';
       const pr = st === 'done' ? 100 : clamp(Math.round(Number(m.p) || 0), 0, 99);
-      tasks.push({ id:lid, parent:null, name:p.name, start:s, end:e, status:st, progress:pr, collapsed:!!m.c });
+      tasks.push(withX({ id:lid, parent:null, name:p.name, start:s, end:e, status:st, progress:pr, collapsed:!!m.c }, m.x));
       map.set(lid, { kind:'p', sid:p.id, color:p.color || COLOR });
       walk(lid);
     });
@@ -625,6 +639,7 @@ const serverStore = (function(){
       const leaf = !parents.has(t.id), o = {};
       if(leaf && t.status !== 'done' && t.progress) o.p = t.progress;
       if(t.collapsed) o.c = 1;
+      const cx = cleanX(t.x); if(cx) o.x = cx;
       if(rec.kind === 'p' && leaf){ o.s = t.start; o.e = t.end; o.t = t.status; }
       if(Object.keys(o).length) meta[rec.kind + rec.sid] = o;
     });
@@ -1417,6 +1432,13 @@ function infoView(t, st, level, kids, isParent){
   add('기간', `${e - s + 1}일`);
   add('상태', pill(st));
   add('진행률', progressEl(t.progress || 0, st));
+  const x = t.x || {};
+  add('우선순위', x.r ? PRIO[x.r] : '—');
+  add('담당', x.w || '—');
+  add('소요시간', x.h || '—');
+  add('마음', x.a || '—');
+  add('성찰', x.f || '—');
+  add('메모', x.m || '—');
   return h('div', {class:'dsec', style:'display:flex;flex-direction:column;gap:18px'}, [
     dl,
     isParent ? h('p', {class:'note'}, [txt('시작·종료·상태·진행률은 세부 항목에서 자동으로 계산됩니다. 바꾸려면 아래 세부 항목을 눌러 수정해 주세요.')]) : null,
@@ -1484,6 +1506,16 @@ function buildEdit(t, isParent){
   }));
   const progI = mkIn('e-prog', {type:'number', min:'0', max:'100', value:String(t.progress ?? 0)});
   if(isParent) [startI, endI, statusS, progI].forEach(x => { x.disabled = true; });
+  const x0 = t.x || {};
+  const prioS = h('select', {id:'e-prio', class:'finput'}, [['', '선택 안 함']].concat(Object.keys(PRIO).map(k => [k, PRIO[k]])).map(([k, l]) => {
+    const o = h('option', {value:k}, [txt(l)]); if(k === (x0.r || '')) o.selected = true; return o;
+  }));
+  const whoI = mkIn('e-who', {type:'text', value:x0.w || '', placeholder:'예: 푸른바다', maxlength:String(XCAP.w)});
+  const hoursI = mkIn('e-hours', {type:'text', value:x0.h || '', placeholder:'예: 3시간', maxlength:String(XCAP.h)});
+  const area = (id, key, ph) => { const a = h('textarea', {id, class:'finput', rows:'3', maxlength:String(XCAP[key]), placeholder:ph}); a.value = x0[key] || ''; return a; };
+  const aimI = area('e-aim', 'a', '이 일을 하는 마음·목표 (Aim)');
+  const refI = area('e-ref', 'f', '해보고 느낀 점·배운 점 (Reflect)');
+  const memoI = area('e-memo', 'm', '자유롭게 적는 메모');
   const err = h('div', {class:'ferr', role:'alert'});
   const field = (label, input, id) => h('label', {class:'field', for:id}, [h('span', {class:'flabel'}, [txt(label)]), input]);
   const el = h('div', {class:'dsec', style:'display:flex;flex-direction:column;gap:14px'}, [
@@ -1491,6 +1523,11 @@ function buildEdit(t, isParent){
     h('div', {class:'frow'}, [field('시작일', startI, 'e-start'), field('종료일', endI, 'e-end')]),
     h('div', {class:'frow'}, [field('상태', statusS, 'e-status'), field('진행률 (%)', progI, 'e-prog')]),
     isParent ? h('p', {class:'note'}, [txt('시작일·종료일·상태·진행률은 세부 항목에서 자동으로 계산되어 여기서는 바꿀 수 없습니다.')]) : null,
+    h('div', {class:'frow'}, [field('우선순위', prioS, 'e-prio'), field('담당', whoI, 'e-who')]),
+    field('소요시간', hoursI, 'e-hours'),
+    field('마음', aimI, 'e-aim'),
+    field('성찰', refI, 'e-ref'),
+    field('메모', memoI, 'e-memo'),
     err
   ]);
   function save(){
@@ -1503,6 +1540,8 @@ function buildEdit(t, isParent){
       t.progress = p;
     }
     t.name = nameI.value.trim();
+    const nx = cleanX({ r:prioS.value, w:whoI.value, h:hoursI.value, a:aimI.value, f:refI.value, m:memoI.value });
+    if(nx) t.x = nx; else delete t.x;
     return true;
   }
   return { el, save, focus:() => { nameI.focus(); nameI.select(); } };
@@ -1670,7 +1709,8 @@ function applyImport(text){
       end: parse(k.end) < parse(k.start) ? k.start : k.end,
       status: STATUS[k.status] ? k.status : 'todo',
       progress: clamp(Number(k.progress) || 0, 0, 100),
-      collapsed: !!k.collapsed
+      collapsed: !!k.collapsed,
+      x: cleanX(k.x) || undefined
     }));
     state.title = String(data.title || '목행성 간트');
     state.zoom = ZOOM[data.zoom] ? data.zoom : 'day';
