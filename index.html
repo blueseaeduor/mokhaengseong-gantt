@@ -1007,8 +1007,10 @@ function ensureRange(){
   const t = localToday();
   let lo = t, hi = t;
   state.tasks.forEach(k => { lo = Math.min(lo, parse(k.start)); hi = Math.max(hi, parse(k.end)); });
-  const needStart = alignMonday(lo - 14);
-  const needEnd = alignMonday(hi + 60) + 6;
+  /* 월·주 보기는 하루 칸이 좁아 화면보다 짧아지므로, 좌우로 움직일 수 있게 앞뒤를 넉넉히 둡니다 */
+  const pad = { day:[14, 60], week:[90, 240], month:[240, 480] }[state.zoom] || [14, 60];
+  const needStart = alignMonday(Math.min(lo - 14, t - pad[0]));
+  const needEnd = alignMonday(Math.max(hi + 60, t + pad[1])) + 6;
   let shift = 0;
   if(view.start === null){ view.start = needStart; view.end = needEnd; }
   else {
