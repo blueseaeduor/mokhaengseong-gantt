@@ -88,6 +88,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 .sync.err{color:var(--danger)}
 .who{display:inline-flex; align-items:center; gap:8px; font-size:12px; color:var(--sub)}
 .who .wn{max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.fbar{display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding:6px 16px; border-bottom:1px solid var(--line)}
+.fbar .finput{width:auto; min-width:0; height:32px; padding:0 10px}
+.fbar #fq{flex:1 1 160px; max-width:260px}
 .chips{display:inline-flex; gap:4px; flex-wrap:wrap}
 .chip{
   border:1px solid var(--line); background:var(--bg); border-radius:999px; padding:4px 10px;
@@ -396,6 +399,13 @@ textarea.finput{resize:vertical; line-height:1.5}
   <button class="btn" id="today">오늘</button>
   <button class="btn" id="data">백업 / 복원</button>
   <button class="btn primary" id="add">+ 목행성 추가</button>
+</div>
+
+<div class="fbar" id="fbar">
+  <input class="finput" id="fq" type="search" placeholder="이름·메모 검색" aria-label="검색">
+  <select class="finput" id="fr" aria-label="우선순위 필터"></select>
+  <select class="finput" id="fw" aria-label="담당 필터"></select>
+  <button class="btn" id="fclear" hidden>필터 지우기</button>
 </div>
 
 <div class="panel" id="dataPanel" role="dialog" aria-label="백업 / 복원" hidden>
@@ -816,8 +826,21 @@ const leavesOf = t => { const k = kidsOf(t.id); return k.length ? k.flatMap(leav
 const canStart = t => leavesOf(t).some(l => l.status === 'todo' || l.status === 'hold');
 
 /* 상태 필터: 조건에 맞는 항목과, 그 항목을 품은 상위 항목(목행성·꿈일)을 함께 보여줌 */
-const filtering = () => state.filter.length > 0;
-const matchesFilter = t => !filtering() || state.filter.includes(t.status);
+/* 상태 · 우선순위 · 담당 · 검색어 (우선순위·담당·검색은 이 화면에서만 적용되고 저장되지 않음) */
+const fx = { q:'', r:'', w:'' };
+const fxOn = () => !!(fx.q || fx.r || fx.w);
+const filtering = () => state.filter.length > 0 || fxOn();
+function matchesFilter(t){
+  if(state.filter.length && !state.filter.includes(t.status)) return false;
+  const x = t.x || {};
+  if(fx.r && x.r !== fx.r) return false;
+  if(fx.w && x.w !== fx.w) return false;
+  if(fx.q){
+    const hay = [t.name, x.w, x.h, x.a, x.f, x.m].join('\n').toLowerCase();
+    if(!hay.includes(fx.q.toLowerCase())) return false;
+  }
+  return true;
+}
 const hasMatch = t => matchesFilter(t) || descendants(t.id).some(matchesFilter);
 
 function visibleRows(){
@@ -833,10 +856,22 @@ function visibleRows(){
 }
 
 function renderFilter(){
+  /* 담당 목록은 지금 입력된 값들로 채움 */
+  const ws = [...new Set(state.tasks.map(t => t.x && t.x.w).filter(Boolean))].sort();
+  if(fx.w && !ws.includes(fx.w)) fx.w = '';
+  const wsel = $('fw'), psel = $('fr');
+  wsel.replaceChildren(h('option', {value:''}, [txt('담당: 전체')]), ...ws.map(w => h('option', {value:w}, [txt(w)])));
+  wsel.value = fx.w;
+  if(!psel.options.length){
+    psel.append(h('option', {value:''}, [txt('우선순위: 전체')]), ...Object.keys(PRIO).map(k => h('option', {value:k}, [txt('우선순위: ' + PRIO[k]) ])));
+  }
+  psel.value = fx.r;
+  if($('fq').value.trim() !== fx.q) $('fq').value = fx.q;
+  $('fclear').hidden = !filtering();
   const box = $('filter');
   box.replaceChildren();
   const mk = (key, label, color) => {
-    const on = key === 'all' ? !filtering() : state.filter.includes(key);
+    const on = key === 'all' ? !state.filter.length : state.filter.includes(key);
     const kids = color ? [h('i', {style:`background:${color}`}), txt(label)] : [txt(label)];
     return h('button', {class:'chip' + (on ? ' on' : ''), 'data-s':key, 'aria-pressed':String(on)}, kids);
   };
@@ -1073,7 +1108,7 @@ function render(){
   /* 본문 */
   const rows = visibleRows();
   if(!rows.length){
-    const msg = filtering() ? '선택한 상태에 해당하는 항목이 없습니다. 위에서 “전체”를 누르면 모두 볼 수 있습니다.'
+    const msg = filtering() ? '조건에 맞는 항목이 없습니다. “필터 지우기”를 누르면 모두 볼 수 있습니다.'
                             : '아직 목행성이 없습니다. 오른쪽 위의 “+ 목행성 추가”를 눌러 시작하세요.';
     inner.append(h('div', {class:'empty', style:'position:sticky;left:0;width:var(--left)'}, [txt(msg)]));
   }
@@ -1283,6 +1318,7 @@ function addTask(parent){
     insertAt = last + 1;
   }
   state.tasks.splice(insertAt, 0, task);
+  if(fxOn()){ fx.q = fx.r = fx.w = ''; }
   if(filtering() && !state.filter.includes('todo')) state.filter = [];   // 새 항목(할 일)이 필터에 가려지지 않도록 해제
   persist(); render();
   /* 새 항목은 바로 이름을 적을 수 있게 세부 사항의 수정 화면을 엽니다 */
@@ -1651,6 +1687,10 @@ $('filter').addEventListener('click', e => {
   else state.filter = [...state.filter, s];
   persist(); render();
 });
+$('fq').addEventListener('input', e => { fx.q = e.target.value.trim(); render(); });
+$('fr').addEventListener('change', e => { fx.r = e.target.value; render(); });
+$('fw').addEventListener('change', e => { fx.w = e.target.value; render(); });
+$('fclear').addEventListener('click', () => { fx.q = fx.r = fx.w = ''; state.filter = []; persist(); render(); });
 $('today').addEventListener('click', () => {
   if(mode === 'cal'){ const m = monthOf(localToday()); calM.y = m.y; calM.m = m.m; renderCal(); }
   else scrollToToday(true);
