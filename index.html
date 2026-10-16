@@ -135,6 +135,17 @@ button,input,select,textarea{font:inherit;color:inherit}
 .row.l2 .nmtxt{color:var(--sub)}
 .row.dragging{opacity:.45}
 body.reordering, body.reordering *{cursor:grabbing !important; user-select:none}
+.dragghost{
+  position:fixed; z-index:50; pointer-events:none; max-width:260px;
+  padding:6px 12px; border-radius:8px; font-weight:600;
+  color:var(--fg); background:color-mix(in srgb, var(--accent) 22%, transparent);
+  border:1.5px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow:0 6px 18px var(--shadow); opacity:.82;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px);
+}
+.dragghost small{font-weight:400; color:var(--sub); margin-left:6px}
+.nmtxt.held{background:color-mix(in srgb, var(--accent) 16%, transparent); box-shadow:0 0 0 1.5px var(--accent) inset}
 .dropline{position:absolute; left:0; width:var(--left); height:3px; margin-top:-1px; background:var(--accent); z-index:9; pointer-events:none; border-radius:2px}
 .left input:hover{background:var(--field-hover)}
 .left input:focus{border-color:var(--accent); background:var(--bg)}
@@ -1107,7 +1118,7 @@ function buildRow(task, level, dw, tlw, today){
 }
 
 /* ---------- 순서 바꾸기 (같은 단계 안에서 위아래) ---------- */
-let justDragged = false, press = null, dropInfo = null, dropLine = null;
+let justDragged = false, press = null, dropInfo = null, dropLine = null, ghost = null;
 const visibleSiblings = t => kidsOf(t.parent || 'root').filter(x => !filtering() || hasMatch(x));
 const blockOf = t => [t, ...descendants(t.id)];
 
@@ -1166,7 +1177,9 @@ function endPress(){
   document.removeEventListener('pointerup', onPressUp);
   document.removeEventListener('pointercancel', onPressCancel);
   document.body.classList.remove('reordering');
-  const r = rowEl(press.task.id); if(r) r.classList.remove('dragging');
+  document.querySelectorAll('.row.dragging').forEach(x => x.classList.remove('dragging'));
+  document.querySelectorAll('.nmtxt.held').forEach(x => x.classList.remove('held'));
+  if(ghost){ ghost.remove(); ghost = null; }
   if(dropLine) dropLine.hidden = true;
   press = null;
 }
@@ -1174,16 +1187,26 @@ function beginRowDrag(){
   if(!press || press.on) return;
   press.on = true;
   document.body.classList.add('reordering');
-  const r = rowEl(press.task.id); if(r) r.classList.add('dragging');
+  /* 잡은 항목(과 그 안의 항목)은 흐리게, 손가락/마우스를 따라다니는 반투명 표시를 띄움 */
+  const blk = blockOf(press.task);
+  blk.forEach(x => { const r = rowEl(x.id); if(r) r.classList.add('dragging'); });
+  press.el.classList.add('held');
+  const sub = blk.length - 1;
+  ghost = h('div', {class:'dragghost', 'aria-hidden':'true'}, [txt(press.task.name || '(이름 없음)'), sub ? h('small', null, [txt(`+ 안의 ${sub}개`)]) : null]);
+  document.body.append(ghost);
+  moveGhost(press.lx, press.ly);
 }
+function moveGhost(x, y){ if(ghost){ ghost.style.left = (x + 14) + 'px'; ghost.style.top = (y - 16) + 'px'; } }
 function onPressMove(e){
   if(!press || e.pointerId !== press.id) return;
   const dx = e.clientX - press.x, dy = e.clientY - press.y, far = Math.hypot(dx, dy);
+  press.lx = e.clientX; press.ly = e.clientY;
   if(!press.on){
     if(press.touch){ if(far > 8){ endPress(); } return; }   // 손가락으로 밀면 화면 스크롤
     if(far > 5) beginRowDrag(); else return;
   }
   e.preventDefault();
+  moveGhost(e.clientX, e.clientY);
   const sr = scrollEl.getBoundingClientRect();
   if(e.clientY < sr.top + 50) scrollEl.scrollTop -= 14;
   else if(e.clientY > sr.bottom - 40) scrollEl.scrollTop += 14;
@@ -1204,7 +1227,7 @@ function beginNamePress(e, task, el){
   if(e.button !== undefined && e.button !== 0) return;
   if(press) endPress();
   const touch = e.pointerType === 'touch';
-  press = { task, el, x:e.clientX, y:e.clientY, id:e.pointerId, on:false, touch, timer:null };
+  press = { task, el, x:e.clientX, y:e.clientY, lx:e.clientX, ly:e.clientY, id:e.pointerId, on:false, touch, timer:null };
   dropInfo = null;
   if(touch) press.timer = setTimeout(beginRowDrag, 350);   // 손가락은 잠시 누르고 있으면 끌기 시작
   document.addEventListener('pointermove', onPressMove);
