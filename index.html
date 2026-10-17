@@ -414,6 +414,7 @@ textarea.finput{resize:vertical; line-height:1.5}
   <button class="btn" id="expandAll">모두 펼치기</button>
   <button class="btn" id="collapseAll">모두 접기</button>
   <button class="btn" id="install" hidden>홈 화면에 추가</button>
+  <button class="btn" id="gBtn">구글 캘린더</button>
   <button class="btn" id="today">오늘</button>
   <button class="btn" id="data">백업 / 복원</button>
   <button class="btn primary" id="add">+ 목행성 추가</button>
@@ -439,6 +440,19 @@ textarea.finput{resize:vertical; line-height:1.5}
     <button class="btn primary" id="smAdd">추가</button>
   </div>
   <p class="note" id="smMsg" role="status"></p>
+</div>
+
+<div class="panel" id="gPanel" role="dialog" aria-label="구글 캘린더 연동" hidden>
+  <p>세부 꿈일을 구글 캘린더의 “목행성” 캘린더에 종일 일정으로 넣습니다. 목행성에서 고치면 구글 캘린더에 반영되고(한쪽 방향), 구글 캘린더 앱과 폰 위젯에서도 볼 수 있어요.</p>
+  <p class="pmsg" id="gState" role="status"></p>
+  <div class="pbtns">
+    <button class="btn primary" id="gConnect">구글에 연결하고 동기화</button>
+    <button class="btn" id="gOff" hidden>연동 끊기</button>
+    <button class="btn" id="gDel" hidden>구글의 목행성 캘린더 지우기</button>
+    <span class="spacer"></span>
+    <button class="btn" id="gClose">닫기</button>
+  </div>
+  <p>연결 정보는 이 브라우저에서 약 1시간만 유지됩니다. 시간이 지나 “동기화 필요”라고 나오면 버튼을 한 번 눌러 주세요. 구글 캘린더에서 직접 고친 내용은 목행성으로 돌아오지 않고, 다음 동기화 때 목행성의 내용으로 되돌려집니다.</p>
 </div>
 
 <div class="panel" id="dataPanel" role="dialog" aria-label="백업 / 복원" hidden>
@@ -710,7 +724,7 @@ const serverStore = (function(){
       map.set(lid, { kind:'p', sid:p.id, color:p.color || COLOR });
       walk(lid);
     });
-    return { title: (typeof ui.title === 'string' && ui.title) ? ui.title : '목행성 간트', zoom:ui.zoom, filter:ui.filter, colw:ui.colw, statuses, tasks };
+    return { title: (typeof ui.title === 'string' && ui.title) ? ui.title : '목행성 간트', zoom:ui.zoom, filter:ui.filter, colw:ui.colw, statuses, gcal:(ui.gcal && typeof ui.gcal.cal === 'string') ? { cal:ui.gcal.cal.slice(0, 200) } : undefined, tasks };
   }
 
   /* 서버에 칸이 없는 값(진행률·접힘·목행성 기간·화면 설정) */
@@ -740,7 +754,7 @@ const serverStore = (function(){
     });
     const ord = {};
     grp.forEach((v, k) => { if(v.length > 1) ord[k] = v; });
-    return { ui:{ title:st.title, zoom:st.zoom, filter:st.filter, colw:st.colw, statuses:st.statuses }, meta, ord };
+    return { ui:{ title:st.title, zoom:st.zoom, filter:st.filter, colw:st.colw, statuses:st.statuses, gcal:st.gcal }, meta, ord };
   }
 
   async function ensureStatus(name){
@@ -1029,6 +1043,7 @@ function sample(){
 
 let saveTimer = null;
 function persist(){
+  gcalSchedule();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => storage.save(state), storage.delay || 150);
 }
@@ -1517,7 +1532,7 @@ function initialMonth(t){
 function openDetail(t){
   detail.id = t.id; detail.tab = 'info'; detail.editing = false; detail.confirm = false;
   detail.cal = initialMonth(t);
-  $('dataPanel').hidden = true;
+  $('dataPanel').hidden = true; $('gPanel').hidden = true;
   renderDetail();
   backdrop.hidden = false; drawer.hidden = false;
   drawer.focus();
@@ -2026,6 +2041,183 @@ async function boot(){
   if(storage.synced) storage.synced(state);
 }
 boot();
+
+/* ---------- 구글 캘린더 연동 (목행성 → 구글, 한쪽 방향) ----------
+   구글이 주는 임시 열쇠(약 1시간)로 브라우저에서 직접 캘린더에 씁니다. 비밀번호·비밀 키는 어디에도 저장하지 않아요.
+   일정 번호를 항목 번호에서 규칙대로 만들기 때문에, 따로 대응표를 저장하지 않아도 같은 일정을 찾아 고칠 수 있습니다. */
+const GCLIENT_ID = '__GOOGLE_CLIENT_ID__';
+const GSCOPE = 'https://www.googleapis.com/auth/calendar.app.created';
+const GAPI = 'https://www.googleapis.com/calendar/v3';
+const GCOLOR = { todo:'8', doing:'7', done:'2', hold:'6' };
+const gc = { token:null, exp:0, busy:false, queued:false, timer:null, on:false, note:'' };
+try{ gc.on = localStorage.getItem('gantt.gcal') === '1'; }catch(e){}
+const gHex = s => Array.from(new TextEncoder().encode(s)).map(b => b.toString(16).padStart(2, '0')).join('');
+const gHasToken = () => !!gc.token && Date.now() < gc.exp - 60000;
+
+function gLoadScript(){
+  return new Promise((res, rej) => {
+    if(window.google && google.accounts && google.accounts.oauth2) return res();
+    const el = document.createElement('script');
+    el.src = 'https://accounts.google.com/gsi/client'; el.async = true;
+    el.onload = () => res(); el.onerror = () => rej({ code:'load' });
+    document.head.append(el);
+  });
+}
+async function gToken(){
+  if(gHasToken()) return gc.token;
+  if(!GCLIENT_ID || GCLIENT_ID.startsWith('__')) throw { code:'noclient' };
+  await gLoadScript();
+  return new Promise((resolve, reject) => {
+    const tc = google.accounts.oauth2.initTokenClient({
+      client_id:GCLIENT_ID, scope:GSCOPE,
+      callback:r => {
+        if(r.error) return reject({ code:r.error });
+        gc.token = r.access_token; gc.exp = Date.now() + (Number(r.expires_in) || 3600) * 1000; resolve(gc.token);
+      },
+      error_callback:e => reject({ code:(e && e.type) || 'popup' })
+    });
+    tc.requestAccessToken({ prompt:'' });
+  });
+}
+async function gApi(method, path, body, tok){
+  const r = await fetch(GAPI + path, { method, headers:{ Authorization:'Bearer ' + tok, 'Content-Type':'application/json' }, body:body ? JSON.stringify(body) : undefined });
+  let data = null; try{ data = await r.json(); }catch(e){}
+  return { ok:r.ok, status:r.status, data };
+}
+
+/* 구글에 있어야 할 일정: 세부 꿈일(3단계 항목) */
+function gDesired(){
+  const out = new Map();
+  state.tasks.forEach(t => {
+    if(levelOf(t) !== MAX_LEVEL) return;
+    const st = STATUS[t.status] || STATUS.todo, x = t.x || {};
+    const lines = [pathOf(t), `상태: ${st.label} · 진행률 ${t.progress || 0}%`];
+    if(x.r) lines.push('우선순위: ' + PRIO[x.r]);
+    if(x.w) lines.push('담당: ' + x.w);
+    if(x.h) lines.push('소요시간: ' + x.h);
+    if(x.a) lines.push('마음: ' + x.a);
+    if(x.f) lines.push('성찰: ' + x.f);
+    if(x.m) lines.push('메모: ' + x.m);
+    lines.push('', location.origin + '/');
+    const id = 'mok' + gHex(t.id);
+    out.set(id, {
+      id, summary:(st.base === 'done' ? '✅ ' : '') + (t.name || '(이름 없음)'),
+      description:lines.join('\n'),
+      start:{ date:t.start }, end:{ date:fmt(parse(t.end) + 1) },
+      colorId:GCOLOR[st.base] || '8',
+      extendedProperties:{ private:{ mok:'1', lid:t.id } }
+    });
+  });
+  return out;
+}
+const gSame = (a, e) => a.summary === e.summary && (a.description || '') === (e.description || '') && a.start.date === (e.start && e.start.date) && a.end.date === (e.end && e.end.date) && a.colorId === e.colorId;
+const gErr = r => Object.assign(new Error('google ' + r.status), { status:r.status, reason:(r.data && r.data.error && r.data.error.errors && r.data.error.errors[0] && r.data.error.errors[0].reason) || '' });
+
+async function gSync(){
+  if(gc.busy){ gc.queued = true; return; }
+  gc.busy = true; gRender('동기화 중…');
+  try{
+    const tok = await gToken();
+    const mk = async () => {
+      const r = await gApi('POST', '/calendars', { summary:'목행성', description:'목행성 간트에서 자동으로 만든 일정입니다.', timeZone:'Asia/Seoul' }, tok);
+      if(!r.ok) throw gErr(r);
+      state.gcal = { cal:r.data.id }; persist();
+      return r.data.id;
+    };
+    let cal = state.gcal && state.gcal.cal;
+    if(!cal) cal = await mk();
+    /* 지금 구글에 있는 목행성 일정 */
+    const list = async () => {
+      const have = new Map(); let page = '';
+      do{
+        const r = await gApi('GET', `/calendars/${encodeURIComponent(cal)}/events?privateExtendedProperty=mok%3D1&maxResults=2500&showDeleted=false${page ? '&pageToken=' + encodeURIComponent(page) : ''}`, null, tok);
+        if(r.status === 404 || r.status === 410) return null;
+        if(!r.ok) throw gErr(r);
+        (r.data.items || []).forEach(e => have.set(e.id, e));
+        page = r.data.nextPageToken || '';
+      } while(page);
+      return have;
+    };
+    let have = await list();
+    if(have === null){ cal = await mk(); have = new Map(); }       // 구글에서 캘린더를 지웠다면 다시 만듦
+    const want = gDesired(), ops = [];
+    const base = `/calendars/${encodeURIComponent(cal)}/events`;
+    want.forEach((ev, id) => {
+      const e = have.get(id);
+      if(!e) ops.push({ k:'add', f:async () => {
+        const r = await gApi('POST', base, ev, tok);
+        if(r.status === 409){ const r2 = await gApi('PUT', base + '/' + id, Object.assign({ status:'confirmed' }, ev), tok); if(!r2.ok) throw gErr(r2); }   // 예전에 지운 같은 번호
+        else if(!r.ok) throw gErr(r);
+      }});
+      else if(!gSame(ev, e)) ops.push({ k:'fix', f:async () => { const r = await gApi('PUT', base + '/' + id, Object.assign({ status:'confirmed' }, ev), tok); if(!r.ok) throw gErr(r); } });
+    });
+    have.forEach((e, id) => { if(!want.has(id)) ops.push({ k:'del', f:async () => { const r = await gApi('DELETE', base + '/' + id, null, tok); if(!r.ok && r.status !== 410 && r.status !== 404) throw gErr(r); } }); });
+    const cnt = { add:0, fix:0, del:0 };
+    let i = 0;
+    await Promise.all(Array.from({ length:4 }, async () => { while(i < ops.length){ const o = ops[i++]; await o.f(); cnt[o.k]++; } }));
+    const t = new Date().toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' });
+    gc.note = `${t} 동기화 완료 · 세부 꿈일 ${want.size}개 (추가 ${cnt.add} · 수정 ${cnt.fix} · 삭제 ${cnt.del})`;
+    gc.err = false;
+  }catch(e){
+    gc.err = true;
+    const c = (e && (e.code || e.status)) || '';
+    if(e && e.status === 401){ gc.token = null; gc.note = '동기화 필요: 구글 연결이 끝났습니다. 버튼을 눌러 다시 연결해 주세요.'; }
+    else if(c === 'noclient') gc.note = '아직 구글 연결 설정이 끝나지 않았습니다. 설정이 끝나면 쓸 수 있어요.';
+    else if(c === 'popup_closed' || c === 'popup_failed_to_open' || c === 'access_denied') gc.note = '구글 연결 창이 닫혔거나 허용되지 않았습니다. 다시 눌러 주세요.';
+    else if(e && e.status === 403 && /accessNotConfigured|SERVICE_DISABLED/i.test(e.reason)) gc.note = '구글 캘린더 API가 아직 켜져 있지 않습니다.';
+    else if(e && (e.status === 429 || e.status === 403)) gc.note = '구글이 잠시 요청을 제한했습니다. 잠시 뒤 다시 눌러 주세요.';
+    else if(c === 'load') gc.note = '구글 연결 스크립트를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.';
+    else gc.note = '동기화하지 못했습니다. 잠시 뒤 다시 눌러 주세요.';
+  }finally{
+    gc.busy = false; gRender();
+    if(gc.queued){ gc.queued = false; gcalSchedule(); }
+  }
+}
+/* 고칠 때마다(열쇠가 살아 있으면) 잠시 뒤 자동으로 반영 */
+function gcalSchedule(){
+  if(!gc.on || !gHasToken()) return;
+  clearTimeout(gc.timer);
+  gc.timer = setTimeout(() => { gSync(); }, 3500);
+}
+function gRender(busyMsg){
+  const live = gc.on && gHasToken();
+  $('gBtn').textContent = !gc.on ? '구글 캘린더' : live ? '구글 캘린더 ✓' : '구글 캘린더 (동기화 필요)';
+  $('gState').textContent = busyMsg || (!gc.on ? '아직 연결하지 않았습니다.' : gc.note || (live ? '연결되어 있습니다.' : '동기화 필요: 아래 버튼을 눌러 주세요.'));
+  $('gState').classList.toggle('err', !!gc.err && !busyMsg);
+  $('gConnect').textContent = gc.on ? '지금 동기화' : '구글에 연결하고 동기화';
+  $('gConnect').disabled = gc.busy;
+  $('gOff').hidden = !gc.on;
+  $('gDel').hidden = !(gc.on && state.gcal && state.gcal.cal);
+  if($('gDel').hidden) $('gDel').textContent = '구글의 목행성 캘린더 지우기';
+}
+$('gBtn').addEventListener('click', () => {
+  const box = $('gPanel'); box.hidden = !box.hidden;
+  if(!box.hidden){ $('dataPanel').hidden = true; gRender(); }
+});
+$('gClose').addEventListener('click', () => { $('gPanel').hidden = true; });
+$('gConnect').addEventListener('click', () => {
+  gc.on = true; try{ localStorage.setItem('gantt.gcal', '1'); }catch(e){}
+  gc.note = ''; gSync();
+});
+$('gOff').addEventListener('click', () => {
+  if(gc.token && window.google && google.accounts && google.accounts.oauth2){ try{ google.accounts.oauth2.revoke(gc.token, () => {}); }catch(e){} }
+  gc.on = false; gc.token = null; gc.note = ''; gc.err = false; clearTimeout(gc.timer);
+  try{ localStorage.removeItem('gantt.gcal'); }catch(e){}
+  gRender(); toast('구글 캘린더 연동을 껐습니다. 이미 넣은 일정은 구글에 남아 있어요.');
+});
+$('gDel').addEventListener('click', async () => {
+  const b = $('gDel');
+  if(b.textContent !== '정말 지울까요? 한 번 더 누르면 지워집니다'){ b.textContent = '정말 지울까요? 한 번 더 누르면 지워집니다'; return; }
+  try{
+    const tok = await gToken();
+    const r = await gApi('DELETE', '/calendars/' + encodeURIComponent(state.gcal.cal), null, tok);
+    if(!r.ok && r.status !== 404 && r.status !== 410) throw gErr(r);
+    state.gcal = undefined; persist();
+    gc.note = '구글의 목행성 캘린더를 지웠습니다. 다시 동기화하면 새로 만들어요.'; gc.err = false;
+  }catch(e){ gc.note = '캘린더를 지우지 못했습니다. 잠시 뒤 다시 시도해 주세요.'; gc.err = true; }
+  gRender();
+});
+gRender();
 
 /* 홈 화면 앱: 설치할 수 있을 때만 “홈 화면에 추가” 버튼을 보여 줌 */
 let installEv = null;
