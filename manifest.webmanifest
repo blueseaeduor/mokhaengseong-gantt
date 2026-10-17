@@ -1,0 +1,16 @@
+{
+  "name": "목행성 간트",
+  "short_name": "목행성",
+  "description": "목행성 · 꿈일 · 세부 꿈일을 간트와 캘린더로 보는 굿게임에듀 일정 앱",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#186254",
+  "lang": "ko",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

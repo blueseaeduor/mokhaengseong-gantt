@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>목행성 간트</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#186254">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="목행성">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <style>
 /* 레이아웃: 위에 툴바, 아래는 왼쪽 이름 목록(고정) + 오른쪽 타임라인. 항목의 세부 내용은 오른쪽에서 열리는 "세부 사항" 창에서 본다 */
 :root{
@@ -406,6 +413,7 @@ textarea.finput{resize:vertical; line-height:1.5}
   </div>
   <button class="btn" id="expandAll">모두 펼치기</button>
   <button class="btn" id="collapseAll">모두 접기</button>
+  <button class="btn" id="install" hidden>홈 화면에 추가</button>
   <button class="btn" id="today">오늘</button>
   <button class="btn" id="data">백업 / 복원</button>
   <button class="btn primary" id="add">+ 목행성 추가</button>
@@ -2018,6 +2026,20 @@ async function boot(){
   if(storage.synced) storage.synced(state);
 }
 boot();
+
+/* 홈 화면 앱: 설치할 수 있을 때만 “홈 화면에 추가” 버튼을 보여 줌 */
+let installEv = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEv = e; $('install').hidden = false; });
+window.addEventListener('appinstalled', () => { installEv = null; $('install').hidden = true; toast('홈 화면에 추가했습니다.'); });
+$('install').addEventListener('click', async () => {
+  if(!installEv) return;
+  installEv.prompt();
+  try{ await installEv.userChoice; }catch(e){}
+  installEv = null; $('install').hidden = true;
+});
+if('serviceWorker' in navigator && location.protocol === 'https:'){
+  window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
+}
 
 })();
 </script>
