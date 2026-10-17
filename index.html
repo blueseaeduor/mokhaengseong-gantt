@@ -157,6 +157,8 @@ body.reordering, body.reordering *{cursor:grabbing !important; user-select:none}
 }
 .dragghost small{font-weight:400; color:var(--sub); margin-left:6px}
 .nmtxt.held{background:color-mix(in srgb, var(--accent) 16%, transparent); box-shadow:0 0 0 1.5px var(--accent) inset}
+.row.flash .bar .bg{animation:flashbar 1.3s ease-out}
+@keyframes flashbar{0%,40%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:none}}
 .dropline{position:absolute; left:0; width:var(--left); height:3px; margin-top:-1px; background:var(--accent); z-index:9; pointer-events:none; border-radius:2px}
 .left input:hover{background:var(--field-hover)}
 .left input:focus{border-color:var(--accent); background:var(--bg)}
@@ -1208,8 +1210,8 @@ function buildRow(task, level, dw, tlw, today){
   /* 이름은 글자로만 보여줌: 누르면 세부 사항(여기서 이름 수정·삭제), 끌면 같은 단계 안에서 위아래 순서 변경 */
   const nameEl = h('div', {
     class:'nmtxt' + (task.name ? '' : ' ph'), 'data-id':task.id, tabindex:'0', role:'button',
-    title:'누르면 세부 사항 · 끌어서 순서 바꾸기 (키보드: Alt+↑/↓)',
-    'aria-label':`${LEVELS[level]} ${task.name || '(이름 없음)'} — 누르면 세부 사항 보기`
+    title:'누르면 일정이 가운데로 · 끌어서 순서 바꾸기 (키보드: Alt+↑/↓) · 세부 사항은 “보기”',
+    'aria-label':`${LEVELS[level]} ${task.name || '(이름 없음)'} — 누르면 일정 위치로 이동`
   }, [txt(task.name || '(이름 없음)')]);
   const nm = h('div', {class:'nm'}, [h('span', {class:'ind', style:`width:${level * 18}px`}), toggle, nameEl]);
 
@@ -1240,10 +1242,10 @@ function buildRow(task, level, dw, tlw, today){
   if(isParent) toggle.addEventListener('click', () => { task.collapsed = !task.collapsed; persist(); render(); });
   nameEl.addEventListener('pointerdown', e => beginNamePress(e, task, nameEl));
   nameEl.addEventListener('contextmenu', e => e.preventDefault());
-  nameEl.addEventListener('click', () => { if(justDragged) return; openDetail(task); });
+  nameEl.addEventListener('click', () => { if(justDragged) return; focusTask(task, row); });
   nameEl.addEventListener('keydown', e => {
     if(e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')){ e.preventDefault(); stepTask(task, e.key === 'ArrowUp' ? -1 : 1); }
-    else if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openDetail(task); }
+    else if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); focusTask(task, row); }
   });
   viewBtn.addEventListener('click', () => openDetail(task));
   if(startBtn) startBtn.addEventListener('click', () => startTask(task));
@@ -1733,6 +1735,17 @@ function renderDetail(){
 backdrop.addEventListener('click', closeDetail);
 
 /* ---------- 상단 버튼 ---------- */
+/* 항목 이름을 누르면 오른쪽 일정 막대가 화면 가운데에 오도록 옮김 (세부 사항은 “보기” 버튼) */
+function focusTask(t, row){
+  const dw = ZOOM[state.zoom];
+  const left = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--left')) || 0;
+  const mid = (parse(t.start) + parse(t.end) + 1) / 2;
+  const visible = Math.max(0, scrollEl.clientWidth - left);
+  const x = (mid - view.start) * dw - visible / 2;
+  scrollEl.scrollTo({ left:Math.max(0, x), behavior:'smooth' });
+  if(row){ row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash'); setTimeout(() => row.classList.remove('flash'), 1400); }
+}
+
 function scrollToToday(smooth){
   const dw = ZOOM[state.zoom];
   const x = (localToday() - view.start) * dw - 160;
