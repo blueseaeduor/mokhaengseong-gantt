@@ -358,6 +358,27 @@ textarea.finput{resize:vertical; line-height:1.5}
 
 
 /* 캘린더 보기 */
+.bhead{display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:2px 0 10px}
+.bhead .note{flex:1 1 240px}
+#board{flex:1; min-height:0; overflow:auto; padding:8px 16px 16px}
+.bcols{display:flex; gap:12px; align-items:flex-start; min-height:70%}
+.bcol{flex:0 0 272px; border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:8px; border:1px solid transparent}
+.bcol.over{border-color:var(--accent); box-shadow:0 0 0 2px var(--ring)}
+.bch{display:flex; align-items:center; gap:8px; padding:2px 2px 0}
+.bcn{font-size:12px; color:var(--sub)}
+.bcards{display:flex; flex-direction:column; gap:8px; min-height:28px}
+.bempty{font-size:12px; color:var(--sub); padding:6px 4px}
+.bcard{background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px 11px; display:flex; flex-direction:column; gap:6px; cursor:grab; box-shadow:0 1px 2px var(--shadow)}
+.bcard:hover{border-color:var(--accent)}
+.bcard.dragging{opacity:.45}
+.bt{font-weight:600; line-height:1.35; overflow-wrap:anywhere}
+.bup{font-size:12px; color:var(--sub); overflow-wrap:anywhere}
+.bd{font-size:12px; color:var(--sub)}
+.btags{display:flex; flex-wrap:wrap; gap:4px}
+.btag{font-size:11px; padding:1px 7px; border-radius:999px; background:var(--hover); border:1px solid var(--line); color:var(--sub)}
+.btag.prio-high{background:#fbe4e4; color:#7a1f1f; border-color:#f3c6c6}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]) .btag.prio-high{background:#4a2323; color:#f5cfcf; border-color:#6a3333} }
+@media (max-width:640px){ .bcol{flex-basis:84vw} }
 #cal{flex:1; min-height:0; overflow:auto; padding:8px 16px 16px}
 .mcnav{display:flex; align-items:center; gap:8px; padding:4px 0 10px}
 .mcnav .mcl{font-size:16px; font-weight:700; min-width:110px; text-align:center}
@@ -405,6 +426,7 @@ textarea.finput{resize:vertical; line-height:1.5}
   <div class="seg" id="mode" role="group" aria-label="보기 방식">
     <button data-m="gantt">간트</button>
     <button data-m="cal">캘린더</button>
+    <button data-m="board">칸반</button>
   </div>
   <div class="seg" id="zoom">
     <button data-z="day">일</button>
@@ -458,6 +480,7 @@ textarea.finput{resize:vertical; line-height:1.5}
 
 <div id="scroll"><div id="inner"></div></div>
 <div id="cal" hidden></div>
+<div id="board" hidden></div>
 
 <div class="backdrop" id="backdrop" hidden></div>
 <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="세부 사항" tabindex="-1" hidden></aside>
@@ -1057,7 +1080,7 @@ function toast(msg){
 
 /* ---------- 캘린더 보기 ---------- */
 let mode = 'gantt';
-try{ if(localStorage.getItem('gantt.mode') === 'cal') mode = 'cal'; }catch(e){}
+try{ const sm = localStorage.getItem('gantt.mode'); if(sm === 'cal' || sm === 'board') mode = sm; }catch(e){}
 const calM = (() => { const m = monthOf(localToday()); return { y:m.y, m:m.m }; })();
 function calShift(n){ const d = new Date(Date.UTC(calM.y, calM.m + n, 1)); calM.y = d.getUTCFullYear(); calM.m = d.getUTCMonth(); }
 function pathOf(t){
@@ -1065,6 +1088,71 @@ function pathOf(t){
   while(c && g++ < 6){ names.unshift(c.name || '(이름 없음)'); c = c.parent ? idx.id.get(c.parent) : null; }
   return names.join(' › ');
 }
+/* ---------- 칸반 보드: 꿈일·세부 꿈일을 상태별 칸으로 ---------- */
+let boardLv = 'all';
+try{ const v = localStorage.getItem('gantt.boardLv'); if(v === '1' || v === '2') boardLv = v; }catch(e){}
+let boardDrag = null;
+function renderBoard(){
+  const box = $('board');
+  const head = h('div', {class:'bhead'}, [
+    h('div', {class:'seg', role:'group', 'aria-label':'보여줄 단계'}, [['all', '꿈일 + 세부'], ['1', '꿈일'], ['2', '세부 꿈일']].map(([v, l]) => {
+      const b = h('button', {type:'button', class:boardLv === v ? 'on' : ''}, [txt(l)]);
+      b.addEventListener('click', () => { boardLv = v; try{ localStorage.setItem('gantt.boardLv', v); }catch(e){} renderBoard(); });
+      return b;
+    })),
+    h('span', {class:'note'}, [txt('카드를 다른 칸으로 끌면 상태가 바뀝니다. 휴대폰은 카드를 눌러 “수정”에서 바꿀 수 있어요.')])
+  ]);
+  const cards = state.tasks.filter(t => {
+    const lv = levelOf(t);
+    return lv >= 1 && (boardLv === 'all' || String(lv) === boardLv) && matchesFilter(t);
+  });
+  const cols = STLIST.map(sd => {
+    const st = STATUS[sd.k];
+    const mine = cards.filter(t => t.status === sd.k).sort((a, b) => parse(a.start) - parse(b.start) || (a.name || '').localeCompare(b.name || ''));
+    const col = h('section', {class:'bcol', 'data-k':sd.k, style:`background:color-mix(in srgb, ${st.bg} 38%, var(--bg))`}, [
+      h('header', {class:'bch'}, [h('span', {class:'pill', style:`background:${st.bg};color:${st.ink}`}, [txt(st.label)]), h('span', {class:'bcn'}, [txt(String(mine.length))])]),
+      h('div', {class:'bcards'}, mine.length ? mine.map(boardCard) : [h('div', {class:'bempty'}, [txt('비어 있음')])])
+    ]);
+    col.addEventListener('dragover', e => { if(!boardDrag) return; e.preventDefault(); col.classList.add('over'); });
+    col.addEventListener('dragleave', e => { if(!col.contains(e.relatedTarget)) col.classList.remove('over'); });
+    col.addEventListener('drop', e => {
+      e.preventDefault(); col.classList.remove('over');
+      const t = boardDrag && idx.id.get(boardDrag); boardDrag = null;
+      if(t) moveToStatus(t, sd.k);
+    });
+    return col;
+  });
+  box.replaceChildren(head, h('div', {class:'bcols'}, cols));
+}
+function boardCard(t){
+  const lv = levelOf(t), x = t.x || {}, st = STATUS[t.status] || STATUS.todo;
+  const up = []; for(let p = idx.id.get(t.parent); p; p = idx.id.get(p.parent)) up.unshift(p.name || '(이름 없음)');
+  const tags = [h('span', {class:'btag'}, [txt(LEVELS[lv])])];
+  if(x.r) tags.push(h('span', {class:'btag prio-' + x.r}, [txt('우선순위 ' + PRIO[x.r])]));
+  if(x.w) tags.push(h('span', {class:'btag'}, [txt(x.w)]));
+  const card = h('article', {class:'bcard', draggable:'true', tabindex:'0', role:'button', 'aria-label':`${LEVELS[lv]} ${t.name || '(이름 없음)'} — 누르면 세부 사항 보기`}, [
+    h('div', {class:'bt'}, [txt(t.name || '(이름 없음)')]),
+    up.length ? h('div', {class:'bup'}, [txt(up.join(' › '))]) : null,
+    h('div', {class:'bd'}, [txt(`${shortDate(parse(t.start))} → ${shortDate(parse(t.end))}`)]),
+    progressEl(t.progress || 0, st),
+    h('div', {class:'btags'}, tags)
+  ]);
+  card.addEventListener('click', () => openDetail(t));
+  card.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openDetail(t); } });
+  card.addEventListener('dragstart', e => { boardDrag = t.id; card.classList.add('dragging'); try{ e.dataTransfer.setData('text/plain', t.id); e.dataTransfer.effectAllowed = 'move'; }catch(_){} });
+  card.addEventListener('dragend', () => { boardDrag = null; card.classList.remove('dragging'); document.querySelectorAll('.bcol.over').forEach(c => c.classList.remove('over')); });
+  return card;
+}
+function moveToStatus(t, k){
+  if(!STATUS[k] || t.status === k) return;
+  t.status = k;
+  if(kidsOf(t.id).length) t.sm = 1;                       // 상위 항목은 직접 고른 상태로 고정
+  else if(baseOf(k) === 'done') t.progress = 100;
+  else if((t.progress || 0) >= 100) t.progress = 99;
+  persist(); render();
+  toast(`“${t.name || '(이름 없음)'}” → ${STATUS[k].label}`);
+}
+
 function renderCal(){
   const box = $('cal');
   box.replaceChildren();
@@ -1123,9 +1211,9 @@ function renderCal(){
   if(!items.length) box.append(h('div', {class:'mcempty'}, [txt(state.tasks.length ? '이 달에 보일 일정이 없습니다.' : '아직 일정이 없습니다. 위의 “+ 목행성 추가”로 시작해 보세요.')]));
 }
 function applyMode(){
-  const cal = mode === 'cal';
-  $('scroll').hidden = cal; $('cal').hidden = !cal;
-  ['zoom', 'expandAll', 'collapseAll'].forEach(id => { $(id).hidden = cal; });
+  $('scroll').hidden = mode !== 'gantt'; $('cal').hidden = mode !== 'cal'; $('board').hidden = mode !== 'board';
+  ['zoom', 'expandAll', 'collapseAll'].forEach(id => { $(id).hidden = mode !== 'gantt'; });
+  $('today').hidden = mode === 'board';
   document.querySelectorAll('#mode button').forEach(b => b.classList.toggle('on', b.dataset.m === mode));
 }
 
@@ -1151,6 +1239,7 @@ function render(){
   recompute();
   applyMode();
   if(mode === 'cal'){ renderFilter(); renderCal(); return; }
+  if(mode === 'board'){ renderFilter(); renderBoard(); if(detail.id) renderDetail(); return; }
   const dw = ZOOM[state.zoom];
   const shift = ensureRange();
   const days = view.end - view.start + 1;
