@@ -1907,21 +1907,16 @@ function showGate(msg, opts){
   $('gmail').hidden = !!opts.noMail;
   gate.hidden = false;
 }
-async function startSocial(provider){
-  gateErr.textContent = '';
-  const cb = location.origin + '/';
-  const url = API + '/v1/auth/start/' + provider + '?callbackURL=' + encodeURIComponent(cb);
-  try{
-    const r = await fetch(url, { redirect:'manual', credentials:'same-origin' });
-    if(r.type !== 'opaqueredirect' && r.status >= 400){
-      const t = await r.text().catch(() => '');
-      gateErr.textContent = /untrusted_callback_url|invalid_callback/i.test(t)
-        ? '이 주소는 아직 로그인이 허용되지 않았습니다. 관리자에게 주소 등록을 요청해 주세요.'
-        : '로그인을 시작하지 못했습니다. 잠시 뒤 다시 눌러 주세요.';
-      return;
-    }
-  }catch(e){ /* 사전 확인이 막혀도 실제 이동은 시도 */ }
-  location.href = url;
+let socialBusy = false;
+function startSocial(provider){
+  /* 로그인 시작 주소는 딱 한 번만 엽니다. 두 번 열면 서로 다른 확인값이 만들어져 휴대폰에서 “state_mismatch” 오류가 날 수 있어요. */
+  if(socialBusy) return;
+  socialBusy = true; gateErr.textContent = '';
+  ['loginKakao', 'loginGoogle'].forEach(id => { $(id).disabled = true; });
+  const free = () => { socialBusy = false; ['loginKakao', 'loginGoogle'].forEach(id => { $(id).disabled = false; }); };
+  window.addEventListener('pageshow', free, { once:true });      // 뒤로 가기로 돌아오면 다시 누를 수 있게
+  setTimeout(free, 20000);
+  location.href = API + '/v1/auth/start/' + provider + '?callbackURL=' + encodeURIComponent(location.origin + '/');
 }
 $('loginKakao').addEventListener('click', () => startSocial('kakao'));
 $('loginGoogle').addEventListener('click', () => startSocial('google'));
@@ -1979,7 +1974,11 @@ function applyLoaded(saved){
 
 async function boot(){
   const m = await detectMode();
-  if(m.mode === 'login'){ showGate(new URLSearchParams(location.search).get('error') ? '로그인하지 못했습니다. 다시 시도해 주세요.' : ''); return; }
+  if(m.mode === 'login'){ const errCode = new URLSearchParams(location.search).get('error');
+    if(errCode){ try{ history.replaceState(null, '', location.pathname); }catch(e){} }
+    showGate(!errCode ? '' : /state/i.test(errCode)
+      ? '로그인 확인이 끝나지 않았습니다. 버튼을 한 번만 누르고, 카카오톡·구글 승인 뒤 처음 열었던 브라우저로 돌아와 주세요. 계속되면 아래 이메일 로그인을 이용할 수 있어요.'
+      : '로그인하지 못했습니다. 다시 시도해 주세요.'); return; }
   if(m.mode === 'server'){
     storage = serverStore;
     const u = m.user || {};

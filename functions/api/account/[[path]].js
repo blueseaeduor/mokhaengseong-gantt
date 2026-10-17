@@ -19,6 +19,12 @@ export async function onRequest({ request, env }) {
     });
   }
 
+  // 로그인 도중 오류 화면(영어 ERROR 페이지) 대신 앱으로 돌려보내, 이미 로그인된 경우엔 바로 열리고 아니면 안내 문구가 나오게 함
+  if (sub === '/api/auth/error') {
+    const code = (url.searchParams.get('error') || 'login_failed').replace(/[^a-z0-9_]/gi, '').slice(0, 40) || 'login_failed';
+    return new Response(null, { status: 302, headers: { Location: '/?error=' + code, 'Cache-Control': 'no-store' } });
+  }
+
   // 로그인 처리 경로는 원래 주소 그대로, 나머지는 앞부분(/api/account)을 뗀 주소로 전달
   const targetPath = sub.startsWith('/api/auth/') ? url.pathname : sub;
   const base = (env.ACCOUNT_SERVICE_URL || DEFAULT_BASE).replace(/\/$/, '');
