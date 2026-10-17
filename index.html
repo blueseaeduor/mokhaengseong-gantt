@@ -91,6 +91,14 @@ button,input,select,textarea{font:inherit;color:inherit}
 .fbar{display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding:6px 16px; border-bottom:1px solid var(--line)}
 .fbar .finput{width:auto; min-width:0; height:32px; padding:0 10px}
 .fbar #fq{flex:1 1 160px; max-width:260px}
+.smgr{padding:8px 16px 10px; border-bottom:1px solid var(--line); display:flex; flex-direction:column; gap:8px; background:var(--surface)}
+.smlist{display:flex; flex-wrap:wrap; gap:6px}
+.smitem{display:inline-flex; align-items:center; gap:4px; padding:3px 4px 3px 10px; border-radius:999px; font-size:13px}
+.smitem button{border:0; background:transparent; cursor:pointer; padding:0 6px; font-size:14px; color:inherit; opacity:.7}
+.smitem button:hover{opacity:1}
+.smadd{display:flex; gap:8px; flex-wrap:wrap}
+.smadd #smName{flex:1 1 160px; max-width:240px; width:auto}
+.smadd select{width:auto}
 .chips{display:inline-flex; gap:4px; flex-wrap:wrap}
 .chip{
   border:1px solid var(--line); background:var(--bg); border-radius:999px; padding:4px 10px;
@@ -406,6 +414,21 @@ textarea.finput{resize:vertical; line-height:1.5}
   <select class="finput" id="fr" aria-label="우선순위 필터"></select>
   <select class="finput" id="fw" aria-label="담당 필터"></select>
   <button class="btn" id="fclear" hidden>필터 지우기</button>
+  <button class="btn" id="smBtn" aria-expanded="false">상태 편집</button>
+</div>
+<div class="smgr" id="smgr" hidden>
+  <div class="smlist" id="smlist"></div>
+  <div class="smadd">
+    <input class="finput" id="smName" maxlength="12" placeholder="새 상태 이름 (예: 검토중)" aria-label="새 상태 이름">
+    <select class="finput" id="smBase" aria-label="색과 성격">
+      <option value="todo">계획처럼 (회색)</option>
+      <option value="doing">진행중처럼 (파랑)</option>
+      <option value="done">완료처럼 (초록, 진행률 100%)</option>
+      <option value="hold">보류처럼 (주황)</option>
+    </select>
+    <button class="btn primary" id="smAdd">추가</button>
+  </div>
+  <p class="note" id="smMsg" role="status"></p>
 </div>
 
 <div class="panel" id="dataPanel" role="dialog" aria-label="백업 / 복원" hidden>
@@ -513,12 +536,39 @@ const shortDate = n => { const d = new Date(n*DAY); return `${d.getUTCMonth()+1}
 const monthOf = n => { const d = new Date(n*DAY); return { y:d.getUTCFullYear(), m:d.getUTCMonth() }; };
 
 /* ---------- 상태 (색은 CSS 변수라서 밝은/어두운 화면에 모두 맞음) ---------- */
-const STATUS = {
-  todo:  { label:'할 일',  bg:'var(--st-todo-bg)',  fill:'var(--st-todo-fill)',  ink:'var(--st-todo-ink)' },
-  doing: { label:'진행 중', bg:'var(--st-doing-bg)', fill:'var(--st-doing-fill)', ink:'var(--st-doing-ink)' },
-  done:  { label:'완료',   bg:'var(--st-done-bg)',  fill:'var(--st-done-fill)',  ink:'var(--st-done-ink)' },
-  hold:  { label:'보류',   bg:'var(--st-hold-bg)',  fill:'var(--st-hold-fill)',  ink:'var(--st-hold-ink)' }
+const BASEST = {
+  todo:  { name:'계획',   bg:'var(--st-todo-bg)',  fill:'var(--st-todo-fill)',  ink:'var(--st-todo-ink)' },
+  doing: { name:'진행중', bg:'var(--st-doing-bg)', fill:'var(--st-doing-fill)', ink:'var(--st-doing-ink)' },
+  done:  { name:'완료',   bg:'var(--st-done-bg)',  fill:'var(--st-done-fill)',  ink:'var(--st-done-ink)' },
+  hold:  { name:'보류',   bg:'var(--st-hold-bg)',  fill:'var(--st-hold-fill)',  ink:'var(--st-hold-ink)' }
 };
+/* 상태 목록: 기본 3가지(계획·진행중·완료)는 늘 있고, 직접 추가한 상태는 4번째부터 이어짐.
+   추가한 상태는 계획/진행중/완료/보류 중 한 가지의 색과 성격을 따라감 */
+const STATUS = {};
+let STLIST = [];
+const SRV_NAMES = ['진행', '중단', '완료', '예정'];
+const defaultStatuses = () => [{k:'todo', label:'계획', base:'todo'}, {k:'doing', label:'진행중', base:'doing'}, {k:'done', label:'완료', base:'done'}];
+function cleanStatuses(list, tasks){
+  const out = defaultStatuses();
+  const labels = new Set(out.map(x => x.label).concat(SRV_NAMES));
+  const keys = new Set(out.map(x => x.k));
+  (Array.isArray(list) ? list : []).forEach(x => {
+    if(!x || typeof x.k !== 'string' || !/^[a-z0-9]{1,14}$/i.test(x.k) || keys.has(x.k)) return;
+    const label = typeof x.label === 'string' ? x.label.trim().slice(0, 12) : '';
+    if(!label || labels.has(label) || !BASEST[x.base]) return;
+    out.push({ k:x.k, label, base:x.base }); keys.add(x.k); labels.add(label);
+  });
+  if(!keys.has('hold') && (tasks || []).some(t => t && t.status === 'hold')) out.push({ k:'hold', label:'보류', base:'hold' });
+  (tasks || []).forEach(t => { if(t && !out.some(x => x.k === t.status)) t.status = 'todo'; });
+  return out;
+}
+function setStatuses(list){
+  STLIST = list;
+  Object.keys(STATUS).forEach(k => delete STATUS[k]);
+  list.forEach(x => { const b = BASEST[x.base]; STATUS[x.k] = { label:x.label, base:x.base, bg:b.bg, fill:b.fill, ink:b.ink }; });
+}
+setStatuses(defaultStatuses());
+const baseOf = k => (STATUS[k] || STATUS.todo).base;
 const ZOOM = { day:36, week:16, month:5 };
 
 /* ---------- 저장소 어댑터 ----------
@@ -600,6 +650,18 @@ const serverStore = (function(){
     const meta = (g.meta && typeof g.meta === 'object') ? g.meta : {};
     const ui = (g.ui && typeof g.ui === 'object') ? g.ui : {};
     const ord = (g.ord && typeof g.ord === 'object') ? g.ord : {};
+    /* 서버의 상태 이름 → 화면 상태. 처음 보는 이름은 새 상태로 추가 */
+    const statuses = cleanStatuses(ui.statuses, []);
+    const keyOfSrv = name => {
+      if(S2L[name]) return S2L[name];
+      let f = statuses.find(x => x.label === name); if(f) return f.k;
+      if(!name) return 'todo';
+      f = { k:'c' + (statuses.length + 1) + Math.random().toString(36).slice(2, 6), label:String(name).slice(0, 12), base:'todo' };
+      statuses.push(f); return f.k;
+    };
+    (d.dreams || []).forEach(x => { if(S2L[x.status] === 'hold' && !statuses.some(y => y.k === 'hold')) statuses.push({ k:'hold', label:'보류', base:'hold' }); });
+    (d.dreams || []).forEach(x => keyOfSrv(x.status));
+    setStatuses(statuses);
     const rank = (key, lid) => { const a = ord[key], i = Array.isArray(a) ? a.indexOf(lid) : -1; return i < 0 ? 1e9 : i; };
 
     map = new Map();
@@ -617,12 +679,13 @@ const serverStore = (function(){
     const today = localToday();
     const walk = pl => (kids.get(pl) || []).forEach(x => {
       const lid = 'd' + x.id, m = meta[lid] || {};
-      const st = S2L[x.status] || 'todo';
+      const st = keyOfSrv(x.status);
       let s = kstDay(x.starts_at), e = kstDay(x.ends_at);
       if(!s) s = fmt(today);
       if(!e || e < s) e = s;
-      const pr = st === 'done' ? 100 : clamp(Math.round(Number(m.p) || 0), 0, 99);
+      const pr = baseOf(st) === 'done' ? 100 : clamp(Math.round(Number(m.p) || 0), 0, 99);
       tasks.push(withX({ id:lid, parent:pl, name:x.title, start:s, end:e, status:st, progress:pr, collapsed:!!m.c }, m.x));
+      if(m.sm) tasks[tasks.length - 1].sm = 1;
       map.set(lid, { kind:'d', sid:x.id, projectLid:'p' + x.project_id, srvStatus:x.status, note:x.note || '' });
       walk(lid);
     });
@@ -631,12 +694,13 @@ const serverStore = (function(){
       const s = isDay(m.s) ? m.s : fmt(today);
       const e = (isDay(m.e) && m.e >= s) ? m.e : fmt(parse(s) + 6);
       const st = STATUS[m.t] ? m.t : 'todo';
-      const pr = st === 'done' ? 100 : clamp(Math.round(Number(m.p) || 0), 0, 99);
+      const pr = baseOf(st) === 'done' ? 100 : clamp(Math.round(Number(m.p) || 0), 0, 99);
       tasks.push(withX({ id:lid, parent:null, name:p.name, start:s, end:e, status:st, progress:pr, collapsed:!!m.c }, m.x));
+      if(m.sm) tasks[tasks.length - 1].sm = 1;
       map.set(lid, { kind:'p', sid:p.id, color:p.color || COLOR });
       walk(lid);
     });
-    return { title: (typeof ui.title === 'string' && ui.title) ? ui.title : '목행성 간트', zoom:ui.zoom, filter:ui.filter, colw:ui.colw, tasks };
+    return { title: (typeof ui.title === 'string' && ui.title) ? ui.title : '목행성 간트', zoom:ui.zoom, filter:ui.filter, colw:ui.colw, statuses, tasks };
   }
 
   /* 서버에 칸이 없는 값(진행률·접힘·목행성 기간·화면 설정) */
@@ -647,10 +711,12 @@ const serverStore = (function(){
     st.tasks.forEach(t => {
       const rec = map.get(t.id); if(!rec) return;
       const leaf = !parents.has(t.id), o = {};
-      if(leaf && t.status !== 'done' && t.progress) o.p = t.progress;
+      if(leaf && baseOf(t.status) !== 'done' && t.progress) o.p = t.progress;
+      if(t.sm) o.sm = 1;
       if(t.collapsed) o.c = 1;
       const cx = cleanX(t.x); if(cx) o.x = cx;
       if(rec.kind === 'p' && leaf){ o.s = t.start; o.e = t.end; o.t = t.status; }
+      else if(rec.kind === 'p' && t.sm) o.t = t.status;
       if(Object.keys(o).length) meta[rec.kind + rec.sid] = o;
     });
     /* 같은 단계 안에서의 순서 */
@@ -664,7 +730,7 @@ const serverStore = (function(){
     });
     const ord = {};
     grp.forEach((v, k) => { if(v.length > 1) ord[k] = v; });
-    return { ui:{ title:st.title, zoom:st.zoom, filter:st.filter, colw:st.colw }, meta, ord };
+    return { ui:{ title:st.title, zoom:st.zoom, filter:st.filter, colw:st.colw, statuses:st.statuses }, meta, ord };
   }
 
   async function ensureStatus(name){
@@ -674,8 +740,8 @@ const serverStore = (function(){
     throw fail(r);
   }
   async function statusFor(s, rec){
-    if(rec && rec.srvStatus && (S2L[rec.srvStatus] || 'todo') === s.status) return rec.srvStatus;   // 예전 앱의 다른 상태 이름은 그대로 둠
-    const name = L2S[s.status] || '예정';
+    if(rec && rec.srvStatus && (S2L[rec.srvStatus] || ((STLIST.find(x => x.label === rec.srvStatus) || {}).k) || 'todo') === s.status) return rec.srvStatus;   // 예전 앱의 다른 상태 이름은 그대로 둠
+    const name = L2S[s.status] || (STATUS[s.status] || {}).label || '예정';
     await ensureStatus(name);
     return name;
   }
@@ -794,7 +860,7 @@ const serverStore = (function(){
 
 let storage = localStore;
 
-let state = { title:'목행성 간트', zoom:'day', filter:[], colw:normColw(), tasks:[] };
+let state = { title:'목행성 간트', zoom:'day', filter:[], colw:normColw(), statuses:defaultStatuses(), tasks:[] };
 const view = { start:null, end:null };
 const scrollEl = $('scroll'), inner = $('inner');
 const drawer = $('drawer'), backdrop = $('backdrop');
@@ -823,7 +889,7 @@ function descendants(id){
   return out;
 }
 const leavesOf = t => { const k = kidsOf(t.id); return k.length ? k.flatMap(leavesOf) : [t]; };
-const canStart = t => leavesOf(t).some(l => l.status === 'todo' || l.status === 'hold');
+const canStart = t => leavesOf(t).some(l => ['todo', 'hold'].includes(baseOf(l.status)));
 
 /* 상태 필터: 조건에 맞는 항목과, 그 항목을 품은 상위 항목(목행성·꿈일)을 함께 보여줌 */
 /* 상태 · 우선순위 · 담당 · 검색어 (우선순위·담당·검색은 이 화면에서만 적용되고 저장되지 않음) */
@@ -855,6 +921,19 @@ function visibleRows(){
   return out;
 }
 
+function renderStatusMgr(){
+  const box = $('smlist');
+  box.replaceChildren(...STLIST.map(x => {
+    const b = BASEST[x.base];
+    const item = h('span', {class:'smitem', style:`background:${b.bg};color:${b.ink}`}, [txt(x.label)]);
+    if(!['todo', 'doing', 'done'].includes(x.k)){
+      const del = h('button', {type:'button', 'data-del':x.k, 'aria-label':`${x.label} 상태 지우기`, title:'이 상태 지우기'}, [txt('×')]);
+      item.append(del);
+    } else item.style.paddingRight = '10px';
+    return item;
+  }));
+}
+
 function renderFilter(){
   /* 담당 목록은 지금 입력된 값들로 채움 */
   const ws = [...new Set(state.tasks.map(t => t.x && t.x.w).filter(Boolean))].sort();
@@ -868,6 +947,7 @@ function renderFilter(){
   psel.value = fx.r;
   if($('fq').value.trim() !== fx.q) $('fq').value = fx.q;
   $('fclear').hidden = !filtering();
+  renderStatusMgr();
   const box = $('filter');
   box.replaceChildren();
   const mk = (key, label, color) => {
@@ -892,10 +972,12 @@ function rollup(t){
   });
   t.start = fmt(lo); t.end = fmt(hi);
   t.progress = wsum ? Math.round(psum / wsum) : 0;
-  const sts = kids.map(k => k.status);
+  if(t.sm && STATUS[t.status]) return;      // 직접 고른 상태는 세부 항목이 덮어쓰지 않음
+  delete t.sm;
+  const sts = kids.map(k => baseOf(k.status));
   if(sts.every(x => x === 'done')) t.status = 'done';
   else if(sts.some(x => x === 'doing' || x === 'done') || t.progress > 0) t.status = 'doing';
-  else if(sts.every(x => x === 'hold')) t.status = 'hold';
+  else if(sts.every(x => x === 'hold') && STATUS.hold) t.status = 'hold';
   else t.status = 'todo';
 }
 function recompute(){ reindex(); (idx.by.get('root') || []).forEach(rollup); }
@@ -1017,7 +1099,7 @@ function renderCal(){
       const st = STATUS[x.t.status] || STATUS.todo;
       const ev = h('button', {
         type:'button',
-        class:'mcev' + (x.s >= ws ? ' cs' : '') + (x.e <= ws + 6 ? ' ce' : '') + (x.t.status === 'done' ? ' done' : ''),
+        class:'mcev' + (x.s >= ws ? ' cs' : '') + (x.e <= ws + 6 ? ' ce' : '') + (baseOf(x.t.status) === 'done' ? ' done' : ''),
         style:`left:calc(${(a - ws) / 7 * 100}% + 2px);width:calc(${(b - a + 1) / 7 * 100}% - 4px);top:${26 + lane * 20}px;background:${st.bg};color:${st.ink}`,
         title:`${pathOf(x.t)}\n${shortDate(x.s)} ~ ${shortDate(x.e)} · ${st.label}`
       }, [txt(x.t.name || '(이름 없음)')]);
@@ -1290,7 +1372,7 @@ document.addEventListener('touchmove', e => { if(press && press.on && e.cancelab
 
 /* 시작: 아직 시작하지 않은(할 일·보류) 세부 항목을 진행 중으로 바꿈 */
 function startTask(t){
-  const ls = leavesOf(t).filter(l => l.status === 'todo' || l.status === 'hold');
+  const ls = leavesOf(t).filter(l => ['todo', 'hold'].includes(baseOf(l.status)));
   if(!ls.length) return;
   const isParent = kidsOf(t.id).length > 0;
   ls.forEach(l => { l.status = 'doing'; });
@@ -1479,7 +1561,7 @@ function infoView(t, st, level, kids, isParent){
   add('메모', x.m || '—');
   return h('div', {class:'dsec', style:'display:flex;flex-direction:column;gap:18px'}, [
     dl,
-    isParent ? h('p', {class:'note'}, [txt('시작·종료·상태·진행률은 세부 항목에서 자동으로 계산됩니다. 바꾸려면 아래 세부 항목을 눌러 수정해 주세요.')]) : null,
+    isParent ? h('p', {class:'note'}, [txt('시작·종료·진행률은 세부 항목에서 자동으로 계산됩니다. 상태는 “수정”에서 직접 고를 수 있어요.')]) : null,
     isParent ? kidList(kids, level) : null
   ]);
 }
@@ -1537,13 +1619,16 @@ function buildEdit(t, isParent){
   const nameI = mkIn('e-name', {type:'text', value:t.name, placeholder:'이름'});
   const startI = mkIn('e-start', {type:'date', value:t.start});
   const endI = mkIn('e-end', {type:'date', value:t.end});
-  const statusS = h('select', {id:'e-status', class:'finput'}, Object.keys(STATUS).map(k => {
-    const o = h('option', {value:k}, [txt(STATUS[k].label)]);
-    if(k === t.status) o.selected = true;
+  const stOpts = Object.keys(STATUS).map(k => [k, STATUS[k].label]);
+  if(isParent) stOpts.unshift(['', '자동 (세부 항목 기준)']);
+  const stCur = isParent && !t.sm ? '' : t.status;
+  const statusS = h('select', {id:'e-status', class:'finput'}, stOpts.map(([k, l]) => {
+    const o = h('option', {value:k}, [txt(l)]);
+    if(k === stCur) o.selected = true;
     return o;
   }));
   const progI = mkIn('e-prog', {type:'number', min:'0', max:'100', value:String(t.progress ?? 0)});
-  if(isParent) [startI, endI, statusS, progI].forEach(x => { x.disabled = true; });
+  if(isParent) [startI, endI, progI].forEach(x => { x.disabled = true; });
   const x0 = t.x || {};
   const prioS = h('select', {id:'e-prio', class:'finput'}, [['', '선택 안 함']].concat(Object.keys(PRIO).map(k => [k, PRIO[k]])).map(([k, l]) => {
     const o = h('option', {value:k}, [txt(l)]); if(k === (x0.r || '')) o.selected = true; return o;
@@ -1560,7 +1645,7 @@ function buildEdit(t, isParent){
     field('이름', nameI, 'e-name'),
     h('div', {class:'frow'}, [field('시작일', startI, 'e-start'), field('종료일', endI, 'e-end')]),
     h('div', {class:'frow'}, [field('상태', statusS, 'e-status'), field('진행률 (%)', progI, 'e-prog')]),
-    isParent ? h('p', {class:'note'}, [txt('시작일·종료일·상태·진행률은 세부 항목에서 자동으로 계산되어 여기서는 바꿀 수 없습니다.')]) : null,
+    isParent ? h('p', {class:'note'}, [txt('시작일·종료일·진행률은 세부 항목에서 자동으로 계산됩니다. 상태는 직접 고르거나 “자동”으로 둘 수 있어요.')]) : null,
     h('div', {class:'frow'}, [field('우선순위', prioS, 'e-prio'), field('담당', whoI, 'e-who')]),
     field('소요시간', hoursI, 'e-hours'),
     field('마음', aimI, 'e-aim'),
@@ -1574,9 +1659,10 @@ function buildEdit(t, isParent){
       if(parse(endI.value) < parse(startI.value)){ err.textContent = '종료일이 시작일보다 빠릅니다. 날짜를 다시 확인해 주세요.'; return false; }
       t.start = startI.value; t.end = endI.value; t.status = statusS.value;
       let p = clamp(Math.round(Number(progI.value) || 0), 0, 100);
-      if(t.status === 'done') p = 100; else if(p === 100) t.status = 'done';
+      if(baseOf(t.status) === 'done') p = 100; else if(p === 100) t.status = 'done';
       t.progress = p;
-    }
+    } else if(statusS.value){ t.status = statusS.value; t.sm = 1; }
+    else delete t.sm;
     t.name = nameI.value.trim();
     const nx = cleanX({ r:prioS.value, w:whoI.value, h:hoursI.value, a:aimI.value, f:refI.value, m:memoI.value });
     if(nx) t.x = nx; else delete t.x;
@@ -1687,6 +1773,37 @@ $('filter').addEventListener('click', e => {
   else state.filter = [...state.filter, s];
   persist(); render();
 });
+$('smBtn').addEventListener('click', () => {
+  const box = $('smgr'); box.hidden = !box.hidden;
+  $('smBtn').setAttribute('aria-expanded', String(!box.hidden));
+  if(!box.hidden) $('smName').focus();
+});
+function addStatus(){
+  const name = $('smName').value.trim().slice(0, 12), msg = $('smMsg');
+  if(!name){ msg.textContent = '상태 이름을 적어 주세요.'; return; }
+  if(STLIST.some(x => x.label === name) || SRV_NAMES.includes(name)){ msg.textContent = '이미 있는 이름입니다. 다른 이름을 적어 주세요.'; return; }
+  if(STLIST.length >= 20){ msg.textContent = '상태는 20개까지 만들 수 있어요.'; return; }
+  const k = 'c' + Date.now().toString(36);
+  state.statuses = STLIST.concat([{ k, label:name, base:$('smBase').value }]);
+  setStatuses(cleanStatuses(state.statuses, []));
+  state.statuses = STLIST;
+  $('smName').value = ''; msg.textContent = `“${name}” 상태를 추가했어요. 수정 화면과 위쪽 필터에서 고를 수 있습니다.`;
+  persist(); render();
+}
+$('smAdd').addEventListener('click', addStatus);
+$('smName').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); addStatus(); } });
+$('smlist').addEventListener('click', e => {
+  const b = e.target.closest('button[data-del]'); if(!b) return;
+  const k = b.dataset.del, gone = STATUS[k]; if(!gone) return;
+  const fallback = gone.base === 'hold' ? 'todo' : gone.base;
+  let n = 0;
+  state.tasks.forEach(t => { if(t.status === k){ t.status = fallback; delete t.sm; n++; } });
+  state.filter = state.filter.filter(x => x !== k);
+  state.statuses = STLIST.filter(x => x.k !== k);
+  setStatuses(state.statuses);
+  $('smMsg').textContent = `“${gone.label}” 상태를 지웠어요.` + (n ? ` 이 상태였던 ${n}개 항목은 “${STATUS[fallback].label}” 상태가 되었습니다.` : '');
+  persist(); render();
+});
 $('fq').addEventListener('input', e => { fx.q = e.target.value.trim(); render(); });
 $('fr').addEventListener('change', e => { fx.r = e.target.value; render(); });
 $('fw').addEventListener('change', e => { fx.w = e.target.value; render(); });
@@ -1746,12 +1863,15 @@ function applyImport(text){
   try{
     const data = JSON.parse(text);
     if(!data || !Array.isArray(data.tasks)) throw new Error('형식 오류');
+    setStatuses(cleanStatuses(data.statuses, data.tasks));
+    state.statuses = STLIST;
     const list = data.tasks.filter(k => k && /^\d{4}-\d{2}-\d{2}$/.test(k.start) && /^\d{4}-\d{2}-\d{2}$/.test(k.end)).map(k => ({
       id: String(k.id || uid()), parent: k.parent ? String(k.parent) : null, name: String(k.name || ''), start: k.start,
       end: parse(k.end) < parse(k.start) ? k.start : k.end,
       status: STATUS[k.status] ? k.status : 'todo',
       progress: clamp(Number(k.progress) || 0, 0, 100),
       collapsed: !!k.collapsed,
+      sm: k.sm ? 1 : undefined,
       x: cleanX(k.x) || undefined
     }));
     state.title = String(data.title || '목행성 간트');
@@ -1848,6 +1968,8 @@ async function detectMode(){
 function applyLoaded(saved){
   if(saved && Array.isArray(saved.tasks)){
     state = Object.assign(state, saved);
+    state.statuses = cleanStatuses(state.statuses, state.tasks);
+    setStatuses(state.statuses);
     delete state.cols;      // 예전 버전의 열 너비 값은 쓰지 않음
     sanitize(state.tasks.map(k => Object.assign({ parent:null, collapsed:false }, k)));
     return true;
