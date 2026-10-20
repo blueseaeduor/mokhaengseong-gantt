@@ -1722,7 +1722,7 @@ function buildEdit(t, isParent){
   };
   fillStatus(stCur);
   const smName = h('input', {class:'finput', maxlength:'12', placeholder:'새 상태 이름 (예: 검토중)', 'aria-label':'새 상태 이름'});
-  const smBase = h('select', {class:'finput', 'aria-label':'색과 성격'}, [['todo','계획처럼 (회색)'],['doing','진행중처럼 (파랑)'],['done','완료처럼 (초록, 진행률 100%)'],['hold','보류처럼 (주황)']].map(([k,l]) => h('option', {value:k}, [txt(l)])));
+  const smBase = h('select', {class:'finput', 'aria-label':'색과 성격'}, [['todo','계획 (회색)'],['doing','진행중 (파랑)'],['done','완료 (초록, 진행률 100%)'],['hold','보류 (주황)']].map(([k,l]) => h('option', {value:k}, [txt(l)])));
   const smAdd = h('button', {type:'button', class:'btn primary'}, [txt('추가')]);
   const smCancel = h('button', {type:'button', class:'btn'}, [txt('닫기')]);
   const smMsg = h('p', {class:'note', role:'status'});
