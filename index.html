@@ -98,14 +98,13 @@ button,input,select,textarea{font:inherit;color:inherit}
 .fbar{display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding:6px 16px; border-bottom:1px solid var(--line)}
 .fbar .finput{width:auto; min-width:0; height:32px; padding:0 10px}
 .fbar #fq{flex:1 1 160px; max-width:260px}
-.smgr{padding:8px 16px 10px; border-bottom:1px solid var(--line); display:flex; flex-direction:column; gap:8px; background:var(--surface)}
+.smgr{padding:10px 12px; border:1px solid var(--line); border-radius:8px; display:flex; flex-direction:column; gap:8px; background:var(--surface)}
+.smgr[hidden]{display:none}
 .smlist{display:flex; flex-wrap:wrap; gap:6px}
 .smitem{display:inline-flex; align-items:center; gap:4px; padding:3px 4px 3px 10px; border-radius:999px; font-size:13px}
 .smitem button{border:0; background:transparent; cursor:pointer; padding:0 6px; font-size:14px; color:inherit; opacity:.7}
 .smitem button:hover{opacity:1}
-.smadd{display:flex; gap:8px; flex-wrap:wrap}
-.smadd #smName{flex:1 1 160px; max-width:240px; width:auto}
-.smadd select{width:auto}
+.smadd{display:flex; flex-direction:column; gap:8px}
 .chips{display:inline-flex; gap:4px; flex-wrap:wrap}
 .chip{
   border:1px solid var(--line); background:var(--bg); border-radius:999px; padding:4px 10px;
@@ -453,23 +452,7 @@ textarea.finput{resize:vertical; line-height:1.5}
   <select class="finput" id="fr" aria-label="우선순위 필터"></select>
   <select class="finput" id="fw" aria-label="담당 필터"></select>
   <button class="btn" id="fclear" hidden>필터 지우기</button>
-  <button class="btn" id="smBtn" aria-expanded="false">상태 편집</button>
 </div>
-<div class="smgr" id="smgr" hidden>
-  <div class="smlist" id="smlist"></div>
-  <div class="smadd">
-    <input class="finput" id="smName" maxlength="12" placeholder="새 상태 이름 (예: 검토중)" aria-label="새 상태 이름">
-    <select class="finput" id="smBase" aria-label="색과 성격">
-      <option value="todo">계획처럼 (회색)</option>
-      <option value="doing">진행중처럼 (파랑)</option>
-      <option value="done">완료처럼 (초록, 진행률 100%)</option>
-      <option value="hold">보류처럼 (주황)</option>
-    </select>
-    <button class="btn primary" id="smAdd">추가</button>
-  </div>
-  <p class="note" id="smMsg" role="status"></p>
-</div>
-
 <div class="panel" id="gPanel" role="dialog" aria-label="구글 캘린더 연동" hidden>
   <p>세부 꿈일을 구글 캘린더의 “목행성” 캘린더에 종일 일정으로 넣습니다. 목행성에서 고치면 구글 캘린더에 반영되고(한쪽 방향), 구글 캘린더 앱과 폰 위젯에서도 볼 수 있어요.</p>
   <p class="pmsg" id="gState" role="status"></p>
@@ -981,19 +964,6 @@ function visibleRows(){
   return out;
 }
 
-function renderStatusMgr(){
-  const box = $('smlist');
-  box.replaceChildren(...STLIST.map(x => {
-    const b = BASEST[x.base];
-    const item = h('span', {class:'smitem', style:`background:${b.bg};color:${b.ink}`}, [txt(x.label)]);
-    if(!['todo', 'doing', 'done'].includes(x.k)){
-      const del = h('button', {type:'button', 'data-del':x.k, 'aria-label':`${x.label} 상태 지우기`, title:'이 상태 지우기'}, [txt('×')]);
-      item.append(del);
-    } else item.style.paddingRight = '10px';
-    return item;
-  }));
-}
-
 function renderFilter(){
   /* 담당 목록은 지금 입력된 값들로 채움 */
   const ws = [...new Set(state.tasks.map(t => t.x && t.x.w).filter(Boolean))].sort();
@@ -1007,7 +977,6 @@ function renderFilter(){
   psel.value = fx.r;
   if($('fq').value.trim() !== fx.q) $('fq').value = fx.q;
   $('fclear').hidden = !filtering();
-  renderStatusMgr();
   const box = $('filter');
   box.replaceChildren();
   const mk = (key, label, color) => {
@@ -1742,14 +1711,50 @@ function buildEdit(t, isParent){
   const nameI = mkIn('e-name', {type:'text', value:t.name, placeholder:'이름'});
   const startI = mkIn('e-start', {type:'date', value:t.start});
   const endI = mkIn('e-end', {type:'date', value:t.end});
-  const stOpts = Object.keys(STATUS).map(k => [k, STATUS[k].label]);
-  if(isParent) stOpts.unshift(['', '자동 (세부 항목 기준)']);
   const stCur = isParent && !t.sm ? '' : t.status;
-  const statusS = h('select', {id:'e-status', class:'finput'}, stOpts.map(([k, l]) => {
-    const o = h('option', {value:k}, [txt(l)]);
-    if(k === stCur) o.selected = true;
-    return o;
-  }));
+  const statusS = h('select', {id:'e-status', class:'finput'});
+  const fillStatus = cur => {
+    const opts = Object.keys(STATUS).map(k => [k, STATUS[k].label]);
+    if(isParent) opts.unshift(['', '자동 (세부 항목 기준)']);
+    opts.push(['__new', '＋ 새 상태 추가…']);
+    statusS.replaceChildren(...opts.map(([k, l]) => { const o = h('option', {value:k}, [txt(l)]); if(k === cur) o.selected = true; return o; }));
+    statusS.dataset.prev = cur;
+  };
+  fillStatus(stCur);
+  const smName = h('input', {class:'finput', maxlength:'12', placeholder:'새 상태 이름 (예: 검토중)', 'aria-label':'새 상태 이름'});
+  const smBase = h('select', {class:'finput', 'aria-label':'색과 성격'}, [['todo','계획처럼 (회색)'],['doing','진행중처럼 (파랑)'],['done','완료처럼 (초록, 진행률 100%)'],['hold','보류처럼 (주황)']].map(([k,l]) => h('option', {value:k}, [txt(l)])));
+  const smAdd = h('button', {type:'button', class:'btn primary'}, [txt('추가')]);
+  const smCancel = h('button', {type:'button', class:'btn'}, [txt('닫기')]);
+  const smMsg = h('p', {class:'note', role:'status'});
+  const smList = h('div', {class:'smlist'});
+  const smBox = h('div', {class:'smgr', hidden:true}, [h('div', {class:'smadd'}, [smName, smBase, h('div', {class:'frow'}, [smAdd, smCancel])]), smList, smMsg]);
+  const renderSmList = () => {
+    smList.replaceChildren(...STLIST.filter(x => !['todo', 'doing', 'done'].includes(x.k)).map(x => {
+      const b = BASEST[x.base];
+      return h('span', {class:'smitem', style:`background:${b.bg};color:${b.ink}`}, [txt(x.label), h('button', {type:'button', 'data-del':x.k, 'aria-label':`${x.label} 상태 지우기`, title:'이 상태 지우기'}, [txt('×')])]);
+    }));
+  };
+  statusS.addEventListener('change', () => {
+    if(statusS.value === '__new'){ smBox.hidden = false; renderSmList(); smName.focus(); }
+    else { statusS.dataset.prev = statusS.value; smBox.hidden = true; smMsg.textContent = ''; }
+  });
+  smAdd.addEventListener('click', () => {
+    const r = addStatusDef(smName.value, smBase.value);
+    if(r.err){ smMsg.textContent = r.err; return; }
+    smName.value = ''; smMsg.textContent = '';
+    fillStatus(r.k); renderSmList(); smBox.hidden = true;
+    persist(); renderFilter();
+  });
+  smName.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); smAdd.click(); } });
+  smCancel.addEventListener('click', () => { statusS.value = statusS.dataset.prev; smBox.hidden = true; smMsg.textContent = ''; });
+  smList.addEventListener('click', e => {
+    const b = e.target.closest('button[data-del]'); if(!b) return;
+    const keep = statusS.dataset.prev === b.dataset.del ? '' : statusS.dataset.prev;
+    const r = deleteStatusDef(b.dataset.del); if(!r) return;
+    fillStatus(keep || (isParent ? '' : r.fallback)); smBox.hidden = false; renderSmList();
+    smMsg.textContent = `“${r.label}” 상태를 지웠어요.` + (r.n ? ` 이 상태였던 ${r.n}개 항목은 “${STATUS[r.fallback].label}” 상태가 되었습니다.` : '');
+    persist(); renderFilter();
+  });
   const progI = mkIn('e-prog', {type:'number', min:'0', max:'100', value:String(t.progress ?? 0)});
   if(isParent) [startI, endI, progI].forEach(x => { x.disabled = true; });
   const x0 = t.x || {};
@@ -1768,6 +1773,7 @@ function buildEdit(t, isParent){
     field('이름', nameI, 'e-name'),
     h('div', {class:'frow'}, [field('시작일', startI, 'e-start'), field('종료일', endI, 'e-end')]),
     h('div', {class:'frow'}, [field('상태', statusS, 'e-status'), field('진행률 (%)', progI, 'e-prog')]),
+    smBox,
     isParent ? h('p', {class:'note'}, [txt('시작일·종료일·진행률은 세부 항목에서 자동으로 계산됩니다. 상태는 직접 고르거나 “자동”으로 둘 수 있어요.')]) : null,
     h('div', {class:'frow'}, [field('우선순위', prioS, 'e-prio'), field('담당', whoI, 'e-who')]),
     field('소요시간', hoursI, 'e-hours'),
@@ -1819,7 +1825,7 @@ function renderDetail(){
     body = f.el;
     const saveB = mkBtn('저장', 'primary'), cancelB = mkBtn('취소');
     saveB.addEventListener('click', () => { if(f.save()){ detail.editing = false; persist(); render(); toast('저장했습니다.'); } });
-    cancelB.addEventListener('click', () => { detail.editing = false; renderDetail(); });
+    cancelB.addEventListener('click', () => { detail.editing = false; render(); });
     foot = h('div', {class:'df'}, [saveB, cancelB]);
     queueMicrotask(f.focus);
   } else {
@@ -1907,37 +1913,28 @@ $('filter').addEventListener('click', e => {
   else state.filter = [...state.filter, s];
   persist(); render();
 });
-$('smBtn').addEventListener('click', () => {
-  const box = $('smgr'); box.hidden = !box.hidden;
-  $('smBtn').setAttribute('aria-expanded', String(!box.hidden));
-  if(!box.hidden) $('smName').focus();
-});
-function addStatus(){
-  const name = $('smName').value.trim().slice(0, 12), msg = $('smMsg');
-  if(!name){ msg.textContent = '상태 이름을 적어 주세요.'; return; }
-  if(STLIST.some(x => x.label === name) || SRV_NAMES.includes(name)){ msg.textContent = '이미 있는 이름입니다. 다른 이름을 적어 주세요.'; return; }
-  if(STLIST.length >= 20){ msg.textContent = '상태는 20개까지 만들 수 있어요.'; return; }
+/* 상태 추가·삭제: 항목의 수정 화면에서 합니다 */
+function addStatusDef(name, base){
+  name = (name || '').trim().slice(0, 12);
+  if(!name) return { err:'상태 이름을 적어 주세요.' };
+  if(STLIST.some(x => x.label === name) || SRV_NAMES.includes(name)) return { err:'이미 있는 이름입니다. 다른 이름을 적어 주세요.' };
+  if(STLIST.length >= 20) return { err:'상태는 20개까지 만들 수 있어요.' };
   const k = 'c' + Date.now().toString(36);
-  state.statuses = STLIST.concat([{ k, label:name, base:$('smBase').value }]);
+  state.statuses = STLIST.concat([{ k, label:name, base }]);
   setStatuses(cleanStatuses(state.statuses, []));
   state.statuses = STLIST;
-  $('smName').value = ''; msg.textContent = `“${name}” 상태를 추가했어요. 수정 화면과 위쪽 필터에서 고를 수 있습니다.`;
-  persist(); render();
+  return { k };
 }
-$('smAdd').addEventListener('click', addStatus);
-$('smName').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); addStatus(); } });
-$('smlist').addEventListener('click', e => {
-  const b = e.target.closest('button[data-del]'); if(!b) return;
-  const k = b.dataset.del, gone = STATUS[k]; if(!gone) return;
+function deleteStatusDef(k){
+  const gone = STATUS[k]; if(!gone) return 0;
   const fallback = gone.base === 'hold' ? 'todo' : gone.base;
   let n = 0;
   state.tasks.forEach(t => { if(t.status === k){ t.status = fallback; delete t.sm; n++; } });
   state.filter = state.filter.filter(x => x !== k);
   state.statuses = STLIST.filter(x => x.k !== k);
   setStatuses(state.statuses);
-  $('smMsg').textContent = `“${gone.label}” 상태를 지웠어요.` + (n ? ` 이 상태였던 ${n}개 항목은 “${STATUS[fallback].label}” 상태가 되었습니다.` : '');
-  persist(); render();
-});
+  return { n, fallback, label:gone.label };
+}
 $('fq').addEventListener('input', e => { fx.q = e.target.value.trim(); render(); });
 $('fr').addEventListener('change', e => { fx.r = e.target.value; render(); });
 $('fw').addEventListener('change', e => { fx.w = e.target.value; render(); });
