@@ -105,14 +105,6 @@ button,input,select,textarea{font:inherit;color:inherit}
 .smitem button{border:0; background:transparent; cursor:pointer; padding:0 6px; font-size:14px; color:inherit; opacity:.7}
 .smitem button:hover{opacity:1}
 .smadd{display:flex; flex-direction:column; gap:8px}
-.chips{display:inline-flex; gap:4px; flex-wrap:wrap}
-.chip{
-  border:1px solid var(--line); background:var(--bg); border-radius:999px; padding:4px 10px;
-  cursor:pointer; font-size:13px; display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
-}
-.chip i{width:8px; height:8px; border-radius:50%; display:inline-block}
-.chip:hover{background:var(--hover)}
-.chip.on{background:var(--chip-on-bg); border-color:var(--chip-on-line); font-weight:600}
 
 /* 스크롤 영역 */
 #scroll{flex:1; min-height:0; overflow:auto; position:relative; overscroll-behavior:contain; -webkit-overflow-scrolling:touch}
@@ -427,7 +419,6 @@ textarea.finput{resize:vertical; line-height:1.5}
   <span class="spacer"></span>
   <span class="sync" id="sync" role="status" aria-live="polite"></span>
   <span class="who" id="who" hidden><span class="wn" id="whoName"></span><button class="btn" id="logout">로그아웃</button></span>
-  <div class="chips" id="filter" role="group" aria-label="상태 필터"></div>
   <div class="seg" id="mode" role="group" aria-label="보기 방식">
     <button data-m="gantt">간트</button>
     <button data-m="cal">캘린더</button>
@@ -448,6 +439,7 @@ textarea.finput{resize:vertical; line-height:1.5}
 </div>
 
 <div class="fbar" id="fbar">
+  <select class="finput" id="fs" aria-label="상태 필터"></select>
   <input class="finput" id="fq" type="search" placeholder="이름·메모 검색" aria-label="검색">
   <select class="finput" id="fr" aria-label="우선순위 필터"></select>
   <select class="finput" id="fw" aria-label="담당 필터"></select>
@@ -977,15 +969,11 @@ function renderFilter(){
   psel.value = fx.r;
   if($('fq').value.trim() !== fx.q) $('fq').value = fx.q;
   $('fclear').hidden = !filtering();
-  const box = $('filter');
-  box.replaceChildren();
-  const mk = (key, label, color) => {
-    const on = key === 'all' ? !state.filter.length : state.filter.includes(key);
-    const kids = color ? [h('i', {style:`background:${color}`}), txt(label)] : [txt(label)];
-    return h('button', {class:'chip' + (on ? ' on' : ''), 'data-s':key, 'aria-pressed':String(on)}, kids);
-  };
-  box.append(mk('all', '전체'));
-  Object.keys(STATUS).forEach(k => box.append(mk(k, STATUS[k].label, STATUS[k].fill)));
+  const ssel = $('fs');
+  const keys = Object.keys(STATUS);
+  ssel.replaceChildren(h('option', {value:''}, [txt('상태: 전체')]), ...keys.map(k => h('option', {value:k}, [txt('상태: ' + STATUS[k].label)])));
+  if(state.filter.length > 1) ssel.append(h('option', {value:'*'}, [txt('상태: 여러 개')]));
+  ssel.value = state.filter.length > 1 ? '*' : (state.filter[0] || '');
 }
 
 /* 세부 항목이 있는 상위 항목은 기간·진행률·상태를 자동으로 집계 */
@@ -1904,13 +1892,10 @@ scrollEl.addEventListener('pointerup', endPan);
 scrollEl.addEventListener('pointercancel', endPan);
 
 $('add').addEventListener('click', () => addTask(null));
-$('filter').addEventListener('click', e => {
-  const b = e.target.closest('button[data-s]');
-  if(!b) return;
-  const s = b.dataset.s;
-  if(s === 'all') state.filter = [];
-  else if(state.filter.includes(s)) state.filter = state.filter.filter(x => x !== s);
-  else state.filter = [...state.filter, s];
+$('fs').addEventListener('change', e => {
+  const v = e.target.value;
+  if(v === '*') return;
+  state.filter = v ? [v] : [];
   persist(); render();
 });
 /* 상태 추가·삭제: 항목의 수정 화면에서 합니다 */
