@@ -1293,15 +1293,10 @@ function buildRow(task, level, dw, tlw, today){
   }, [txt(task.name || '(이름 없음)')]);
   const nm = h('div', {class:'nm'}, [h('span', {class:'ind', style:`width:${level * 18}px`}), toggle, nameEl]);
 
-  /* 마우스를 올리면 나오는 버튼: 보기 · 시작 · + */
+  /* 마우스를 올리면 나오는 버튼: 보기 · + */
   const acts = h('div', {class:'acts'});
   const viewBtn = h('button', {class:'ab txt view', title:'세부 사항 보기'}, [txt('보기')]);
   acts.append(viewBtn);
-  let startBtn = null;
-  if(canStart(task)){
-    startBtn = h('button', {class:'ab txt start', title:'시작하기 (진행 중으로 바꾸기)'}, [txt('시작')]);
-    acts.append(startBtn);
-  }
   let addBtn = null;
   if(level < MAX_LEVEL){
     addBtn = h('button', {class:'ab add', title:LEVELS[level + 1] + ' 추가', 'aria-label':LEVELS[level + 1] + ' 추가'}, [txt('+')]);
@@ -1326,7 +1321,6 @@ function buildRow(task, level, dw, tlw, today){
     else if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); focusTask(task, row); }
   });
   viewBtn.addEventListener('click', () => openDetail(task));
-  if(startBtn) startBtn.addEventListener('click', () => startTask(task));
   if(addBtn) addBtn.addEventListener('click', () => addTask(task));
   return row;
 }
