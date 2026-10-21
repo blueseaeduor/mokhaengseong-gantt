@@ -2107,7 +2107,7 @@ async function boot(){
     if(!applyLoaded(await localStore.load())) state.tasks = sample();
   }
   if(!ZOOM[state.zoom]) state.zoom = 'day';
-  state.filter = Array.isArray(state.filter) ? state.filter.filter(s => STATUS[s]) : [];
+  state.filter = ['doing'];   // 첫 화면은 늘 “상태: 진행중”만 보임 (위쪽 상태 칸에서 바꿀 수 있음)
   state.colw = normColw(state.colw);
   $('title').value = state.title; document.title = state.title || '목행성 간트';
   render(); scrollToToday(false);
