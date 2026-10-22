@@ -950,7 +950,7 @@ function visibleRows(){
     (idx.by.get(key) || []).forEach(t => {
       if(filtering() && !hasMatch(t)) return;
       out.push({ t, level });
-      if(!t.collapsed || filtering()) walk(t.id, level + 1);   // 필터 중에는 접힌 항목 안의 결과도 표시
+      if(!t.collapsed || fxOn()) walk(t.id, level + 1);   // 검색·우선순위·담당 필터 중에만 접힌 항목 안의 결과도 표시 (상태 필터는 접기를 따름)
     });
   })('root', 0);
   return out;
