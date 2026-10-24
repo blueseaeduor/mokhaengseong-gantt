@@ -106,6 +106,24 @@ button,input,select,textarea{font:inherit;color:inherit}
 .smitem button:hover{opacity:1}
 .smadd{display:flex; flex-direction:column; gap:8px}
 
+/* 뽀모 집중 */
+.pomo{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom, 0px) + 16px); transform:translateX(-50%); z-index:60; width:min(360px, calc(100% - 24px));
+  background:var(--bg); border:1px solid var(--line); border-radius:14px; box-shadow:0 10px 34px var(--shadow); padding:14px 16px; display:flex; flex-direction:column; gap:10px; align-items:center; text-align:center}
+.pomo[hidden]{display:none}
+.pomo .pt{font-size:13px; color:var(--sub); overflow-wrap:anywhere}
+.pomo .pn{font-weight:600; font-size:15px; overflow-wrap:anywhere}
+.pomo .pc{font-size:52px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.1}
+.pomo.break .pc{color:var(--st-done-fill, #3a9a6a)}
+.pomo .pb{display:flex; gap:8px; flex-wrap:wrap; justify-content:center}
+.pomo .ps{font-size:12px; color:var(--sub)}
+.pomo .pbar2{width:100%; height:6px; border-radius:99px; background:var(--st-todo-bg); overflow:hidden}
+.pomo .pbar2 i{display:block; height:100%; background:var(--accent); transition:width .4s linear}
+.pomo .px{position:absolute; top:6px; right:8px; border:0; background:transparent; cursor:pointer; color:var(--sub); font-size:13px; padding:4px 8px; border-radius:6px}
+.pomo .px:hover{background:var(--hover)}
+.pomopill{position:fixed; right:12px; bottom:calc(env(safe-area-inset-bottom, 0px) + 12px); z-index:60; border:1px solid var(--line); background:var(--bg); box-shadow:0 6px 20px var(--shadow);
+  border-radius:999px; padding:8px 14px; font-size:14px; font-weight:600; cursor:pointer; font-variant-numeric:tabular-nums; max-width:calc(100% - 24px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.pomopill[hidden]{display:none}
+
 /* 스크롤 영역 */
 #scroll{flex:1; min-height:0; overflow:auto; position:relative; overscroll-behavior:contain; -webkit-overflow-scrolling:touch}
 #scroll.panning, #scroll.panning *{cursor:grabbing !important; user-select:none}
@@ -631,6 +649,15 @@ function cleanX(o){
   return Object.keys(x).length ? x : null;
 }
 const withX = (task, o) => { const x = cleanX(o); if(x) task.x = x; return task; };
+/* 뽀모 집중 기록: fm = 이 항목에 쓴 총 초, fd = 날짜별 초(최근 60일) */
+function cleanFocus(fm, fd){
+  const out = { fm:Math.max(0, Math.min(Math.round(Number(fm) || 0), 3.6e7)) };
+  const d = {};
+  if(fd && typeof fd === 'object') Object.keys(fd).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort().slice(-60).forEach(k => { const v = Math.round(Number(fd[k]) || 0); if(v > 0) d[k] = Math.min(v, 86400); });
+  if(Object.keys(d).length) out.fd = d;
+  return out;
+}
+const withFocus = (task, m) => { if(m && m.fm > 0){ const f = cleanFocus(m.fm, m.fd); if(f.fm){ task.fm = f.fm; if(f.fd) task.fd = f.fd; } } return task; };
 
 const localStore = {
   key:'gantt.v2', delay:150,
@@ -721,6 +748,7 @@ const serverStore = (function(){
       const pr = baseOf(st) === 'done' ? 100 : clamp(Math.round(Number(m.p) || 0), 0, 99);
       tasks.push(withX({ id:lid, parent:pl, name:x.title, start:s, end:e, status:st, progress:pr, collapsed:!!m.c }, m.x));
       if(m.sm) tasks[tasks.length - 1].sm = 1;
+      withFocus(tasks[tasks.length - 1], m);
       map.set(lid, { kind:'d', sid:x.id, projectLid:'p' + x.project_id, srvStatus:x.status, note:x.note || '' });
       walk(lid);
     });
@@ -732,6 +760,7 @@ const serverStore = (function(){
       const pr = baseOf(st) === 'done' ? 100 : clamp(Math.round(Number(m.p) || 0), 0, 99);
       tasks.push(withX({ id:lid, parent:null, name:p.name, start:s, end:e, status:st, progress:pr, collapsed:!!m.c }, m.x));
       if(m.sm) tasks[tasks.length - 1].sm = 1;
+      withFocus(tasks[tasks.length - 1], m);
       map.set(lid, { kind:'p', sid:p.id, color:p.color || COLOR });
       walk(lid);
     });
@@ -750,6 +779,7 @@ const serverStore = (function(){
       if(t.sm) o.sm = 1;
       if(t.collapsed) o.c = 1;
       const cx = cleanX(t.x); if(cx) o.x = cx;
+      if(t.fm > 0){ const f = cleanFocus(t.fm, t.fd); o.fm = f.fm; if(f.fd) o.fd = f.fd; }
       if(rec.kind === 'p' && leaf){ o.s = t.start; o.e = t.end; o.t = t.status; }
       else if(rec.kind === 'p' && t.sm) o.t = t.status;
       if(Object.keys(o).length) meta[rec.kind + rec.sid] = o;
@@ -1297,6 +1327,9 @@ function buildRow(task, level, dw, tlw, today){
   const acts = h('div', {class:'acts'});
   const viewBtn = h('button', {class:'ab txt view', title:'세부 사항 보기'}, [txt('보기')]);
   acts.append(viewBtn);
+  const focBtn = h('button', {class:'ab foc', title:'뽀모 집중 시작 (한 만큼 자동 기록)', 'aria-label':'집중 시작'}, [txt('⏱')]);
+  focBtn.addEventListener('click', e => { e.stopPropagation(); pomoStart(task.id); });
+  acts.append(focBtn);
   let addBtn = null;
   if(level < MAX_LEVEL){
     addBtn = h('button', {class:'ab add', title:LEVELS[level + 1] + ' 추가', 'aria-label':LEVELS[level + 1] + ' 추가'}, [txt('+')]);
@@ -1633,6 +1666,7 @@ function infoView(t, st, level, kids, isParent){
   add('마음', x.a || '—');
   add('성찰', x.f || '—');
   add('꿈일', x.m || '—');
+  add('집중한 시간', focusText(t));
   return h('div', {class:'dsec', style:'display:flex;flex-direction:column;gap:18px'}, [
     dl,
     isParent ? h('p', {class:'note'}, [txt('시작·종료·진행률은 세부 항목에서 자동으로 계산됩니다. 상태는 “수정”에서 직접 고를 수 있어요.')]) : null,
@@ -1835,7 +1869,9 @@ function renderDetail(){
       const editB = mkBtn('수정'), delB = mkBtn('삭제', 'ghost-danger');
       editB.addEventListener('click', () => { detail.tab = 'info'; detail.editing = true; renderDetail(); });
       delB.addEventListener('click', () => { detail.confirm = true; renderDetail(); });
-      foot = h('div', {class:'df'}, [editB, delB]);
+      const fb = mkBtn('⏱ 집중 시작', 'primary');
+      fb.addEventListener('click', () => pomoStart(t.id));
+      foot = h('div', {class:'df'}, [fb, editB, delB]);
     }
   }
   drawer.replaceChildren(...[head, tabs, h('div', {class:'dbody'}, [body, foot].filter(Boolean))].filter(Boolean));
@@ -1982,7 +2018,9 @@ function applyImport(text){
       progress: clamp(Number(k.progress) || 0, 0, 100),
       collapsed: !!k.collapsed,
       sm: k.sm ? 1 : undefined,
-      x: cleanX(k.x) || undefined
+      x: cleanX(k.x) || undefined,
+      fm: k.fm > 0 ? cleanFocus(k.fm, k.fd).fm : undefined,
+      fd: k.fm > 0 ? cleanFocus(k.fm, k.fd).fd : undefined
     }));
     state.title = String(data.title || '목행성 간트');
     state.zoom = ZOOM[data.zoom] ? data.zoom : 'day';
@@ -2113,6 +2151,7 @@ async function boot(){
   render(); scrollToToday(false);
   ready = true;
   if(storage.synced) storage.synced(state);
+  pomoResume();
 }
 boot();
 
@@ -2292,6 +2331,160 @@ $('gDel').addEventListener('click', async () => {
   gRender();
 });
 gRender();
+
+/* ---------- 뽀모 집중 시계 ----------
+   항목에서 ⏱를 누르면 시계가 돌고, 지나간 시간만큼 그 항목의 “집중한 시간”에 자동으로 쌓입니다(1분마다·멈출 때·끝날 때).
+   탭을 닫거나 새로고침해도 시계 상태를 기억해 이어집니다. */
+const POMO_KEY = 'gantt.pomo';
+const pomo = { id:null, phase:'idle', len:25*60, startedAt:0, used:0, rec:0, n:0, focusLen:25*60, open:true };
+let pomoTimer = null, pomoFlushAt = 0;
+const pomoSave = () => { try{ localStorage.setItem(POMO_KEY, JSON.stringify(pomo)); }catch(e){} };
+const pomoElapsed = () => pomo.used + (pomo.startedAt ? (Date.now() - pomo.startedAt) / 1000 : 0);
+const fmtDur = sec => {
+  const m = Math.floor(sec / 60), hh = Math.floor(m / 60);
+  if(m < 1) return sec > 0 ? '1분 미만' : '0분';
+  return hh ? `${hh}시간${m % 60 ? ' ' + (m % 60) + '분' : ''}` : `${m}분`;
+};
+function focusTotal(t){
+  let sum = t.fm || 0;
+  kidsOf(t.id).forEach(k => { sum += focusTotal(k); });
+  return sum;
+}
+function focusText(t){
+  const own = t.fm || 0, all = focusTotal(t), today = fmt(localToday());
+  const td = (t.fd && t.fd[today]) || 0;
+  if(!all) return '아직 없음 — ⏱ 집중 시작을 눌러 보세요';
+  let out = fmtDur(all);
+  if(kidsOf(t.id).length && own !== all) out += ` (세부 항목 합계${own ? ', 이 항목 직접 ' + fmtDur(own) : ''})`;
+  if(td) out += ` · 오늘 ${fmtDur(td)}`;
+  return out;
+}
+function pomoFlush(){
+  if(pomo.phase !== 'focus') return;
+  const t = idx.id.get(pomo.id); if(!t) return;
+  const delta = Math.min(Math.floor(pomoElapsed()), pomo.len) - pomo.rec;
+  if(delta <= 0) return;
+  pomo.rec += delta;
+  const day = fmt(localToday());
+  t.fm = (t.fm || 0) + delta;
+  t.fd = Object.assign({}, t.fd); t.fd[day] = (t.fd[day] || 0) + delta;
+  const f = cleanFocus(t.fm, t.fd); t.fd = f.fd;
+  clearTimeout(saveTimer); saveTimer = setTimeout(() => storage.save(state), storage.delay || 150);   // 구글 캘린더는 건드리지 않음
+  pomoSave();
+}
+function pomoBeep(){
+  try{
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    [0, .25, .5].forEach(d => { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = 880; o.connect(g); g.connect(ac.destination);
+      g.gain.setValueAtTime(.15, ac.currentTime + d); g.gain.exponentialRampToValueAtTime(.001, ac.currentTime + d + .2); o.start(ac.currentTime + d); o.stop(ac.currentTime + d + .22); });
+  }catch(e){}
+  try{ navigator.vibrate && navigator.vibrate([200, 100, 200]); }catch(e){}
+}
+function pomoStart(id){
+  const t = idx.id.get(id); if(!t) return;
+  if(pomo.phase !== 'idle' && pomo.id !== id){ pomoFlush(); }
+  Object.assign(pomo, { id, phase:'focus', len:pomo.focusLen, startedAt:Date.now(), used:0, rec:0, open:true });
+  if(detail.id) closeDetail();
+  pomoSave(); pomoTick(); pomoRender();
+}
+function pomoPauseToggle(){
+  if(pomo.phase === 'idle') return;
+  if(pomo.startedAt){ pomoFlush(); pomo.used = pomoElapsed(); pomo.startedAt = 0; }
+  else pomo.startedAt = Date.now();
+  pomoSave(); pomoRender();
+}
+function pomoStop(){
+  pomoFlush();
+  const t = idx.id.get(pomo.id), got = pomo.phase === 'focus' ? pomo.rec : 0;
+  Object.assign(pomo, { phase:'idle', startedAt:0, used:0, rec:0, id:null });
+  pomoSave(); pomoRender(); document.title = state.title || '목행성 간트';
+  if(t && got) toast(`“${t.name}”에 ${fmtDur(got)} 기록했습니다.`);
+  render();
+}
+function pomoNext(){   // 집중이 끝난 뒤 → 휴식, 휴식이 끝난 뒤 → 다음 집중
+  if(pomo.phase === 'focus'){
+    pomoFlush(); pomo.n++;
+    Object.assign(pomo, { phase:'break', len:(pomo.n % 4 ? 5 : 15) * 60, startedAt:Date.now(), used:0, rec:0 });
+  } else if(pomo.phase === 'break'){
+    Object.assign(pomo, { phase:'focus', len:pomo.focusLen, startedAt:Date.now(), used:0, rec:0 });
+  }
+  pomoSave(); pomoRender();
+}
+function pomoTick(){
+  clearInterval(pomoTimer);
+  pomoTimer = setInterval(() => {
+    if(pomo.phase === 'idle' || !pomo.startedAt) return;
+    if(!idx.id.get(pomo.id)){ Object.assign(pomo, { phase:'idle', startedAt:0, used:0, rec:0, id:null }); pomoSave(); pomoRender(); return; }
+    const el = pomoElapsed();
+    if(el >= pomo.len){
+      const wasFocus = pomo.phase === 'focus';
+      pomoBeep(); pomoNext();
+      toast(wasFocus ? '집중 끝! 기록했어요. 잠깐 쉬어요.' : '휴식 끝! 다시 집중해 볼까요?');
+      render(); return;
+    }
+    if(pomo.phase === 'focus' && Date.now() - pomoFlushAt > 60000){ pomoFlushAt = Date.now(); pomoFlush(); }
+    pomoRender(true);
+  }, 500);
+}
+let pomoEl = null, pillEl = null;
+function pomoRender(light){
+  if(!pomoEl){
+    pomoEl = h('div', {class:'pomo', role:'dialog', 'aria-label':'뽀모 집중 시계', hidden:true});
+    pillEl = h('button', {class:'pomopill', hidden:true, title:'눌러서 시계 열기'});
+    pillEl.addEventListener('click', () => { pomo.open = true; pomoSave(); pomoRender(); });
+    document.body.append(pomoEl, pillEl);
+  }
+  const t = idx.id.get(pomo.id);
+  if(pomo.phase === 'idle' || !t){ pomoEl.hidden = true; pillEl.hidden = true; return; }
+  const left = Math.max(0, Math.ceil(pomo.len - pomoElapsed()));
+  const mm = String(Math.floor(left / 60)).padStart(2, '0') + ':' + String(left % 60).padStart(2, '0');
+  const focus = pomo.phase === 'focus';
+  document.title = `${mm} ${focus ? '집중' : '휴식'} · ${t.name}`;
+  pillEl.textContent = `${focus ? '⏱' : '☕'} ${mm} · ${t.name || '(이름 없음)'}`;
+  pillEl.hidden = pomo.open;
+  pomoEl.hidden = !pomo.open;
+  if(light === true && pomoEl.querySelector('.pc')){
+    pomoEl.querySelector('.pc').textContent = mm;
+    pomoEl.querySelector('.pbar2 i').style.width = Math.min(100, pomoElapsed() / pomo.len * 100) + '%';
+    pomoEl.querySelector('.ps').textContent = pomoStat(t);
+    return;
+  }
+  const btn = (label, cls, fn) => { const b = h('button', {class:'btn' + (cls ? ' ' + cls : ''), type:'button'}, [txt(label)]); b.addEventListener('click', fn); return b; };
+  const x = h('button', {class:'px', type:'button', title:'작게 접기 (시계는 계속 돌아요)'}, [txt('접기 ▾')]);
+  x.addEventListener('click', () => { pomo.open = false; pomoSave(); pomoRender(); });
+  const lenSel = h('select', {class:'finput', 'aria-label':'집중 시간', style:'width:auto'}, [15, 25, 50].map(m => { const o = h('option', {value:String(m * 60)}, [txt(m + '분 집중')]); if(m * 60 === pomo.focusLen) o.selected = true; return o; }));
+  lenSel.addEventListener('change', () => { pomo.focusLen = Number(lenSel.value); if(pomo.phase === 'focus' && pomoElapsed() < 1) pomo.len = pomo.focusLen; pomoSave(); pomoRender(); });
+  const running = !!pomo.startedAt;
+  const btns = [btn(running ? '일시정지' : '계속', '', pomoPauseToggle), btn(focus ? '여기까지 기록하고 끝내기' : '휴식 건너뛰기', focus ? 'primary' : '', focus ? pomoStop : () => { pomoNext(); })];
+  if(!focus) btns.push(btn('그만하기', '', pomoStop));
+  const bar = h('div', {class:'pbar2'}, [h('i', {style:`width:${Math.min(100, pomoElapsed() / pomo.len * 100)}%`})]);
+  pomoEl.className = 'pomo' + (focus ? '' : ' break');
+  pomoEl.replaceChildren(x,
+    h('div', {class:'pt'}, [txt(focus ? '집중 중' : '쉬는 중')]),
+    h('div', {class:'pn'}, [txt(t.name || '(이름 없음)')]),
+    h('div', {class:'pc'}, [txt(mm)]), bar,
+    h('div', {class:'pb'}, btns),
+    focus ? lenSel : null,
+    h('div', {class:'ps'}, [txt(pomoStat(t))]));
+}
+function pomoStat(t){
+  const today = fmt(localToday()), td = (t.fd && t.fd[today]) || 0;
+  return `이 항목 오늘 ${fmtDur(td)} · 합계 ${fmtDur(focusTotal(t))}` + (pomo.n ? ` · 오늘 ${pomo.n}번 완료` : '');
+}
+function pomoResume(){
+  try{
+    const r = JSON.parse(localStorage.getItem(POMO_KEY) || 'null');
+    if(r && typeof r === 'object'){
+      pomo.focusLen = [900, 1500, 3000].includes(r.focusLen) ? r.focusLen : 1500;
+      if(r.phase !== 'idle' && idx.id.get(r.id)) Object.assign(pomo, { id:r.id, phase:r.phase, len:Number(r.len) || 1500, startedAt:r.startedAt || 0, used:Number(r.used) || 0, rec:Number(r.rec) || 0, n:Number(r.n) || 0, open:r.open !== false });
+    }
+  }catch(e){}
+  if(pomo.phase !== 'idle'){
+    if(pomo.phase === 'focus') pomoFlush();
+    if(pomo.startedAt && pomoElapsed() >= pomo.len){ pomo.phase === 'focus' ? pomoNext() : Object.assign(pomo, { phase:'idle', id:null, startedAt:0 }); }
+    pomoTick(); pomoRender();
+  }
+}
 
 /* 홈 화면 앱: 설치할 수 있을 때만 “홈 화면에 추가” 버튼을 보여 줌 */
 let installEv = null;
