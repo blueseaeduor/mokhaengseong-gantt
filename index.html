@@ -106,6 +106,16 @@ button,input,select,textarea{font:inherit;color:inherit}
 .smitem button:hover{opacity:1}
 .smadd{display:flex; flex-direction:column; gap:8px}
 
+/* 아이콘 버튼 · 실행 줄 */
+.ic{display:inline-flex; align-items:center; justify-content:center; line-height:0; pointer-events:none}
+.ab.run.on{color:var(--accent); background:var(--chip-on-bg)}
+.ab.foc.on{color:var(--accent)}
+.runrow{min-height:34px; --row:34px}
+.runrow .runlbl{color:var(--sub); font-size:12px; cursor:default}
+.runrow .runtot{color:var(--fg)}
+.runbar{position:absolute; top:50%; height:18px; margin-top:-9px; border-radius:4px; background:var(--accent); opacity:.85; display:flex; align-items:center; justify-content:center; z-index:3}
+.runbar span{font-size:10px; font-weight:600; color:var(--accent-ink); white-space:nowrap; overflow:hidden}
+
 /* 뽀모 집중 */
 .pomo{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom, 0px) + 16px); transform:translateX(-50%); z-index:60; width:min(360px, calc(100% - 24px));
   background:var(--bg); border:1px solid var(--line); border-radius:14px; box-shadow:0 10px 34px var(--shadow); padding:14px 16px; display:flex; flex-direction:column; gap:10px; align-items:center; text-align:center}
@@ -194,7 +204,7 @@ body.reordering, body.reordering *{cursor:grabbing !important; user-select:none}
 .ab.txt:hover{background:var(--hover)}
 .ab.start{background:var(--chip-on-bg); border-color:var(--chip-on-line)}
 @media (hover:none){ .ab{opacity:1} }
-@media (max-width:720px){ .acts{right:4px; gap:2px; padding:1px 2px; background:color-mix(in srgb, var(--bg) 78%, transparent)} .ab.txt{padding:0 5px; font-size:11px; height:22px; min-width:0} .ab:not(.txt){width:22px; height:22px} }
+@media (max-width:720px){ .acts{right:4px; gap:2px; padding:1px 2px; background:color-mix(in srgb, var(--bg) 78%, transparent)} .ab.txt{padding:0 5px; font-size:11px; height:22px; min-width:0} .ab:not(.txt){width:28px; height:28px} }
 .ab{white-space:nowrap}
 
 /* 제목 행: 이름 열의 경계를 끌어 너비 조절 */
@@ -980,6 +990,7 @@ function visibleRows(){
     (idx.by.get(key) || []).forEach(t => {
       if(filtering() && !hasMatch(t)) return;
       out.push({ t, level });
+      if(runOpen.has(t.id)) out.push({ t, level, run:true });
       if(!t.collapsed || fxOn()) walk(t.id, level + 1);   // 검색·우선순위·담당 필터 중에만 접힌 항목 안의 결과도 표시 (상태 필터는 접기를 따름)
     });
   })('root', 0);
@@ -1304,7 +1315,7 @@ function render(){
                             : '아직 목행성이 없습니다. 오른쪽 위의 “+ 목행성 추가”를 눌러 시작하세요.';
     inner.append(h('div', {class:'empty', style:'position:sticky;left:0;width:var(--left)'}, [txt(msg)]));
   }
-  rows.forEach(r => inner.append(buildRow(r.t, r.level, dw, tlw, today)));
+  rows.forEach(r => inner.append(r.run ? buildRunRow(r.t, r.level, dw, tlw, today) : buildRow(r.t, r.level, dw, tlw, today)));
 
   if(shift) scrollEl.scrollLeft += shift * dw;
   if(detail.id) renderDetail();
@@ -1325,11 +1336,12 @@ function buildRow(task, level, dw, tlw, today){
 
   /* 마우스를 올리면 나오는 버튼: 보기 · + */
   const acts = h('div', {class:'acts'});
-  const viewBtn = h('button', {class:'ab txt view', title:'세부 사항 보기'}, [txt('보기')]);
+  const viewBtn = h('button', {class:'ab view', title:'세부 사항 보기', 'aria-label':'세부 사항 보기'}, [icon('eye')]);
   acts.append(viewBtn);
-  const focBtn = h('button', {class:'ab foc', title:'뽀모 집중 시작 (한 만큼 자동 기록)', 'aria-label':'집중 시작'}, [txt('⏱')]);
-  focBtn.addEventListener('click', e => { e.stopPropagation(); pomoStart(task.id); });
-  acts.append(focBtn);
+  const runOn = runOpen.has(task.id);
+  const runBtn = h('button', {class:'ab run' + (runOn ? ' on' : ''), title:runOn ? '실행 줄 닫기' : '실행 줄 열기 (실제로 한 시간 보기)', 'aria-label':'실행 줄 열기·닫기', 'aria-pressed':String(runOn)}, [icon('run')]);
+  runBtn.addEventListener('click', e => { e.stopPropagation(); toggleRun(task.id); });
+  acts.append(runBtn);
   let addBtn = null;
   if(level < MAX_LEVEL){
     addBtn = h('button', {class:'ab add', title:LEVELS[level + 1] + ' 추가', 'aria-label':LEVELS[level + 1] + ' 추가'}, [txt('+')]);
@@ -1674,6 +1686,18 @@ function infoView(t, st, level, kids, isParent){
   ]);
 }
 
+function runView(t){
+  const days = focusDays(t), keys = Object.keys(days).sort().reverse(), total = focusTotal(t);
+  const wrap = h('div', {class:'dsec', style:'display:flex;flex-direction:column;gap:14px'});
+  wrap.append(h('div', {class:'kh'}, [txt('실제로 집중한 시간 — 합계 ' + (total ? fmtDur(total) : '없음'))]));
+  if(!keys.length){ wrap.append(h('p', {class:'note'}, [txt('아직 기록이 없습니다. 항목 아래 “실행” 줄의 시계 버튼(또는 아래 “집중 시작”)을 누르면 한 시간이 자동으로 쌓입니다.')])); return wrap; }
+  const dl = h('dl', {class:'info'});
+  keys.slice(0, 60).forEach(d => dl.append(h('dt', null, [txt(shortDate(parse(d)))]), h('dd', null, [txt(fmtDur(days[d]))])));
+  wrap.append(dl);
+  if(keys.length > 60) wrap.append(h('p', {class:'note'}, [txt('최근 60일까지만 보여 줍니다.')]));
+  return wrap;
+}
+
 function calendarEl(t, kids, level, isParent){
   const { y, m } = detail.cal;
   const first = Math.floor(Date.UTC(y, m, 1) / DAY);
@@ -1845,12 +1869,12 @@ function renderDetail(){
     foot = h('div', {class:'df'}, [saveB, cancelB]);
     queueMicrotask(f.focus);
   } else {
-    tabs = h('div', {class:'dtabrow'}, [h('div', {class:'seg', role:'tablist'}, [['info', '정보'], ['cal', '달력']].map(([k, label]) => {
+    tabs = h('div', {class:'dtabrow'}, [h('div', {class:'seg', role:'tablist'}, [['info', '정보'], ['cal', '달력'], ['run', '실행 기록']].map(([k, label]) => {
       const b = h('button', {class:detail.tab === k ? 'on' : '', role:'tab', 'aria-selected':String(detail.tab === k)}, [txt(label)]);
       b.addEventListener('click', () => { detail.tab = k; detail.confirm = false; renderDetail(); });
       return b;
     }))]);
-    body = detail.tab === 'cal'
+    body = detail.tab === 'run' ? runView(t) : detail.tab === 'cal'
       ? h('div', {style:'display:flex;flex-direction:column;gap:18px'}, [calendarEl(t, kids, level, isParent), isParent ? kidList(kids, level) : null])
       : infoView(t, st, level, kids, isParent);
 
@@ -2332,6 +2356,57 @@ $('gDel').addEventListener('click', async () => {
 });
 gRender();
 
+/* ---------- 아이콘 ---------- */
+const ICONS = {
+  eye:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  run:'<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z"/></svg>',
+  timer:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 1.5M9.5 2.5h5M12 2.5v3"/></svg>'
+};
+const icon = name => { const el = document.createElement('span'); el.className = 'ic'; el.innerHTML = ICONS[name]; return el; };
+
+/* ---------- 실행 줄: 항목 아래에 열리는, 실제로 한 시간 ---------- */
+const runOpen = new Set();
+try{ JSON.parse(localStorage.getItem('gantt.runopen') || '[]').forEach(x => runOpen.add(String(x))); }catch(e){}
+const runSave = () => { try{ localStorage.setItem('gantt.runopen', JSON.stringify([...runOpen])); }catch(e){} };
+function toggleRun(id){ if(runOpen.has(id)) runOpen.delete(id); else runOpen.add(id); runSave(); render(); }
+/* 날짜별 집중한 초: 이 항목 + 아래 세부 항목 전부 */
+function focusDays(t){
+  const out = {};
+  const add = x => { if(x.fd) Object.keys(x.fd).forEach(d => { out[d] = (out[d] || 0) + x.fd[d]; }); };
+  add(t); descendants(t.id).forEach(add);
+  return out;
+}
+const shortDur = sec => { const m = Math.max(1, Math.round(sec / 60)); return m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, '0') : ''}` : `${m}분`; };
+function buildRunRow(task, level, dw, tlw, today){
+  const days = focusDays(task), total = focusTotal(task);
+  const active = pomo.phase !== 'idle' && pomo.id === task.id;
+  const label = h('div', {class:'nmtxt runlbl', title:'실제로 한 시간'}, [txt('실행'), h('span', {class:'runtot'}, [txt(total ? ' · ' + fmtDur(total) : ' · 아직 없음')])]);
+  const nm = h('div', {class:'nm'}, [h('span', {class:'ind', style:`width:${level * 18 + 18}px`}), label]);
+  const acts = h('div', {class:'acts'});
+  const vb = h('button', {class:'ab', title:'실행 기록 보기', 'aria-label':'실행 기록 보기'}, [icon('eye')]);
+  const tb = h('button', {class:'ab foc' + (active ? ' on' : ''), title:'뽀모 집중 시작 (한 만큼 자동 기록)', 'aria-label':'뽀모 집중 시작'}, [icon('timer')]);
+  vb.addEventListener('click', () => { openDetail(task); detail.tab = 'run'; renderDetail(); });
+  tb.addEventListener('click', () => { if(active){ pomo.open = true; pomoSave(); pomoRender(); } else pomoStart(task.id); });
+  acts.append(vb, tb);
+  const left = h('div', {class:'left'}, [nm, acts, mkRs()]);
+  const tl = h('div', {class:'tl', style:`width:${tlw}px`});
+  tl.append(h('div', {class:'today-line', style:`left:${(today - view.start)*dw + dw/2 - 1}px`}));
+  Object.keys(days).sort().forEach(d => {
+    const n = parse(d); if(n < view.start || n > view.end) return;
+    const bar = h('div', {class:'runbar', title:`${shortDate(n)} · ${fmtDur(days[d])} 집중`, style:`left:${(n - view.start) * dw}px;width:${Math.max(dw, 4)}px`});
+    if(dw >= 30) bar.append(h('span', null, [txt(shortDur(days[d]))]));
+    tl.append(bar);
+  });
+  return h('div', {class:'row runrow l' + level, 'data-run':task.id}, [left, tl]);
+}
+function refreshRunRow(id){
+  if(!runOpen.has(id)) return;
+  const old = inner.querySelector(`.runrow[data-run="${id}"]`), t = idx.id.get(id);
+  if(!old || !t) return;
+  const dw = ZOOM[state.zoom];
+  old.replaceWith(buildRunRow(t, levelOf(t), dw, curTlw, localToday()));
+}
+
 /* ---------- 뽀모 집중 시계 ----------
    항목에서 ⏱를 누르면 시계가 돌고, 지나간 시간만큼 그 항목의 “집중한 시간”에 자동으로 쌓입니다(1분마다·멈출 때·끝날 때).
    탭을 닫거나 새로고침해도 시계 상태를 기억해 이어집니다. */
@@ -2359,6 +2434,7 @@ function focusText(t){
   if(td) out += ` · 오늘 ${fmtDur(td)}`;
   return out;
 }
+const ancestorIds = t => { const a = []; for(let p = idx.id.get(t.parent), g = 0; p && g < 5; p = idx.id.get(p.parent), g++) a.push(p.id); return a; };
 function pomoFlush(){
   if(pomo.phase !== 'focus') return;
   const t = idx.id.get(pomo.id); if(!t) return;
@@ -2370,6 +2446,7 @@ function pomoFlush(){
   t.fd = Object.assign({}, t.fd); t.fd[day] = (t.fd[day] || 0) + delta;
   const f = cleanFocus(t.fm, t.fd); t.fd = f.fd;
   clearTimeout(saveTimer); saveTimer = setTimeout(() => storage.save(state), storage.delay || 150);   // 구글 캘린더는 건드리지 않음
+  [t.id, ...ancestorIds(t)].forEach(refreshRunRow);
   pomoSave();
 }
 function pomoBeep(){
