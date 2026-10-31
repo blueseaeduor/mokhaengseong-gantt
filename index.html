@@ -106,6 +106,18 @@ button,input,select,textarea{font:inherit;color:inherit}
 .smitem button:hover{opacity:1}
 .smadd{display:flex; flex-direction:column; gap:8px}
 
+/* 연결선 */
+svg.links{position:absolute; left:0; top:0; z-index:2; pointer-events:none; overflow:visible}
+.lnk{fill:none; stroke:var(--sub); stroke-width:1.6; opacity:.85; color:var(--sub)}
+.lnk.late{stroke:var(--danger); color:var(--danger); stroke-dasharray:5 3}
+.lnk.tmpl{stroke:var(--accent); stroke-width:2.2; stroke-dasharray:4 3}
+.bar .lk{position:absolute; right:-19px; top:50%; width:12px; height:12px; margin-top:-6px; border-radius:50%; background:var(--bg); border:2px solid var(--accent); cursor:crosshair; z-index:5; opacity:0; touch-action:none}
+.bar:hover .lk,.bar:focus-within .lk,body.linking .bar .lk{opacity:1}
+@media (hover:none){ .bar .lk{opacity:.9; width:14px; height:14px; margin-top:-7px; right:-23px} }
+body.linking, body.linking *{cursor:crosshair !important; user-select:none}
+.bar.lk-ok{outline:2px solid var(--accent); outline-offset:2px}
+.bar.lk-no{outline:2px dashed var(--danger); outline-offset:2px}
+
 /* 아이콘 버튼 · 실행 줄 */
 .ic{display:inline-flex; align-items:center; justify-content:center; line-height:0; pointer-events:none}
 .ab.run.on{color:var(--accent); background:var(--chip-on-bg)}
@@ -558,6 +570,7 @@ function applyLayout(){
   root.setProperty('--cols', state.colw[grp()] + 'px');
   root.setProperty('--left', L + 'px');
   inner.style.width = (L + curTlw) + 'px';
+  if(typeof drawLinks === 'function') requestAnimationFrame(drawLinks);
 }
 /* 이름 칸의 오른쪽 벽: 모든 줄의 오른쪽 끝에 이어 붙어 있어, 어디서든 잡고 좌우로 끌면 너비가 바뀝니다 */
 function mkRs(){
@@ -667,6 +680,8 @@ function cleanFocus(fm, fd){
   if(Object.keys(d).length) out.fd = d;
   return out;
 }
+/* 연결선: dep = 먼저 끝나야 하는 항목(앞선 일)들의 번호 */
+const cleanDep = (a, self) => Array.isArray(a) ? [...new Set(a.map(String))].filter(x => x && x !== self).slice(0, 8) : [];
 const withFocus = (task, m) => { if(m && m.fm > 0){ const f = cleanFocus(m.fm, m.fd); if(f.fm){ task.fm = f.fm; if(f.fd) task.fd = f.fd; } } return task; };
 
 const localStore = {
@@ -759,6 +774,7 @@ const serverStore = (function(){
       tasks.push(withX({ id:lid, parent:pl, name:x.title, start:s, end:e, status:st, progress:pr, collapsed:!!m.c }, m.x));
       if(m.sm) tasks[tasks.length - 1].sm = 1;
       withFocus(tasks[tasks.length - 1], m);
+      if(m.dp) tasks[tasks.length - 1].dep = cleanDep(m.dp, lid);
       map.set(lid, { kind:'d', sid:x.id, projectLid:'p' + x.project_id, srvStatus:x.status, note:x.note || '' });
       walk(lid);
     });
@@ -771,6 +787,7 @@ const serverStore = (function(){
       tasks.push(withX({ id:lid, parent:null, name:p.name, start:s, end:e, status:st, progress:pr, collapsed:!!m.c }, m.x));
       if(m.sm) tasks[tasks.length - 1].sm = 1;
       withFocus(tasks[tasks.length - 1], m);
+      if(m.dp) tasks[tasks.length - 1].dep = cleanDep(m.dp, lid);
       map.set(lid, { kind:'p', sid:p.id, color:p.color || COLOR });
       walk(lid);
     });
@@ -789,6 +806,7 @@ const serverStore = (function(){
       if(t.sm) o.sm = 1;
       if(t.collapsed) o.c = 1;
       const cx = cleanX(t.x); if(cx) o.x = cx;
+      if(t.dep && t.dep.length){ const ok = cleanDep(t.dep, t.id).filter(x => map.has(x)); if(ok.length) o.dp = ok; }
       if(t.fm > 0){ const f = cleanFocus(t.fm, t.fd); o.fm = f.fm; if(f.fd) o.fd = f.fd; }
       if(rec.kind === 'p' && leaf){ o.s = t.start; o.e = t.end; o.t = t.status; }
       else if(rec.kind === 'p' && t.sm) o.t = t.status;
@@ -1045,6 +1063,7 @@ function sanitize(list){
   const ids = new Set(list.map(k => k.id));
   list.forEach(k => { k.name = fixName(k.name); if(k.parent && (!ids.has(k.parent) || k.parent === k.id)) k.parent = null; });
   state.tasks = list; reindex();
+  list.forEach(k => { if(k.dep){ const d = cleanDep(k.dep, k.id).filter(x => ids.has(x)); if(d.length) k.dep = d; else delete k.dep; } });
   list.forEach(k => {
     let guard = 0;
     while(levelOf(k) > MAX_LEVEL && guard++ < 10){
@@ -1318,6 +1337,7 @@ function render(){
   rows.forEach(r => inner.append(r.run ? buildRunRow(r.t, r.level, dw, tlw, today) : buildRow(r.t, r.level, dw, tlw, today)));
 
   if(shift) scrollEl.scrollLeft += shift * dw;
+  drawLinks();
   if(detail.id) renderDetail();
 }
 
@@ -1537,7 +1557,7 @@ function makeBar(task, level, isParent, dw){
   const s = parse(task.start), e = parse(task.end);
   const w = (e - s + 1) * dw;
   const label = task.name || '(이름 없음)';
-  const bar = h('div', {class:'bar lvl' + level, title:`${label} · ${shortDate(s)} ~ ${shortDate(e)} · ${st.label} · ${task.progress || 0}%`});
+  const bar = h('div', {class:'bar lvl' + level, 'data-bid':task.id, title:`${label} · ${shortDate(s)} ~ ${shortDate(e)} · ${st.label} · ${task.progress || 0}%`});
   place(bar, s, e, dw);
   bar.append(h('div', {class:'bg', style:`background:${st.bg}`}));
   bar.append(h('div', {class:'fill', style:`background:${st.fill};width:${clamp(task.progress||0, 0, 100)}%`}));
@@ -1545,6 +1565,9 @@ function makeBar(task, level, isParent, dw){
   else bar.append(h('div', {class:'out'}, [txt(label)]));
 
   bar.addEventListener('pointerdown', ev => startDrag(ev, task, 'move', bar, dw, isParent));
+  const dot = h('div', {class:'lk', title:'끌어서 다른 항목에 놓으면 연결선이 생겨요 (뒤따르는 일)', 'aria-hidden':'true'});
+  dot.addEventListener('pointerdown', ev => startLink(ev, task, dot));
+  bar.append(dot);
   if(!isParent){   // 상위 항목은 기간이 자동 계산되므로 양 끝 조절 없음
     const hl = h('div', {class:'h l'}), hr = h('div', {class:'h r'});
     bar.append(hl, hr);
@@ -1679,6 +1702,9 @@ function infoView(t, st, level, kids, isParent){
   add('성찰', x.f || '—');
   add('꿈일', x.m || '—');
   add('집중한 시간', focusText(t));
+  const preds = (t.dep || []).map(id => idx.id.get(id)).filter(Boolean), succs = state.tasks.filter(x => (x.dep || []).includes(t.id));
+  add('앞선 일', preds.length ? preds.map(x => x.name || '(이름 없음)').join(', ') : '—');
+  add('뒤따르는 일', succs.length ? succs.map(x => x.name || '(이름 없음)').join(', ') : '—');
   return h('div', {class:'dsec', style:'display:flex;flex-direction:column;gap:18px'}, [
     dl,
     isParent ? h('p', {class:'note'}, [txt('시작·종료·진행률은 세부 항목에서 자동으로 계산됩니다. 상태는 “수정”에서 직접 고를 수 있어요.')]) : null,
@@ -1807,6 +1833,18 @@ function buildEdit(t, isParent){
   const aimI = area('e-aim', 'a', '이 일을 하는 마음·목표 (Aim)');
   const refI = area('e-ref', 'f', '해보고 느낀 점·배운 점 (Reflect)');
   const memoI = area('e-memo', 'm', '꿈일을 자유롭게 적어 주세요');
+  let deps = (t.dep || []).filter(id => idx.id.get(id));
+  const depList = h('div', {class:'smlist'});
+  const depSel = h('select', {id:'e-dep', class:'finput'});
+  const refreshDeps = () => {
+    depList.replaceChildren(...deps.map(id => { const p = idx.id.get(id); const c = h('span', {class:'smitem', style:'background:var(--chip-on-bg)'}, [txt(p.name || '(이름 없음)')]);
+      const x = h('button', {type:'button', 'aria-label':'연결 끊기', title:'연결 끊기'}, [txt('×')]); x.addEventListener('click', () => { deps = deps.filter(d => d !== id); refreshDeps(); }); c.append(x); return c; }));
+    const cands = state.tasks.filter(x => x !== t && !deps.includes(x.id) && !isRelated(x, t) && !reaches(t.id, x.id));
+    depSel.replaceChildren(h('option', {value:''}, [txt(cands.length ? '＋ 앞선 일 고르기…' : '연결할 수 있는 항목이 없어요')]), ...cands.map(x => h('option', {value:x.id}, [txt(taskLabel(x))])));
+    depSel.disabled = !cands.length || deps.length >= 8;
+  };
+  depSel.addEventListener('change', () => { if(depSel.value && deps.length < 8){ deps = [...deps, depSel.value]; } refreshDeps(); });
+  refreshDeps();
   const err = h('div', {class:'ferr', role:'alert'});
   const field = (label, input, id) => h('label', {class:'field', for:id}, [h('span', {class:'flabel'}, [txt(label)]), input]);
   const el = h('div', {class:'dsec', style:'display:flex;flex-direction:column;gap:14px'}, [
@@ -1817,6 +1855,7 @@ function buildEdit(t, isParent){
     isParent ? h('p', {class:'note'}, [txt('시작일·종료일·진행률은 세부 항목에서 자동으로 계산됩니다. 상태는 직접 고르거나 “자동”으로 둘 수 있어요.')]) : null,
     h('div', {class:'frow'}, [field('우선순위', prioS, 'e-prio'), field('담당', whoI, 'e-who')]),
     field('소요시간', hoursI, 'e-hours'),
+    h('div', {class:'field'}, [h('span', {class:'flabel'}, [txt('앞선 일 (이 일보다 먼저 끝나야 하는 일 → 연결선)')]), depList, depSel]),
     field('마음', aimI, 'e-aim'),
     field('성찰', refI, 'e-ref'),
     field('꿈일', memoI, 'e-memo'),
@@ -1833,6 +1872,7 @@ function buildEdit(t, isParent){
     } else if(statusS.value){ t.status = statusS.value; t.sm = 1; }
     else delete t.sm;
     t.name = nameI.value.trim();
+    if(deps.length) t.dep = deps.slice(); else delete t.dep;
     const nx = cleanX({ r:prioS.value, w:whoI.value, h:hoursI.value, a:aimI.value, f:refI.value, m:memoI.value });
     if(nx) t.x = nx; else delete t.x;
     return true;
@@ -2043,6 +2083,7 @@ function applyImport(text){
       collapsed: !!k.collapsed,
       sm: k.sm ? 1 : undefined,
       x: cleanX(k.x) || undefined,
+      dep: Array.isArray(k.dep) && k.dep.length ? cleanDep(k.dep, String(k.id)) : undefined,
       fm: k.fm > 0 ? cleanFocus(k.fm, k.fd).fm : undefined,
       fd: k.fm > 0 ? cleanFocus(k.fm, k.fd).fd : undefined
     }));
@@ -2356,6 +2397,103 @@ $('gDel').addEventListener('click', async () => {
 });
 gRender();
 
+/* ---------- 연결선 (앞선 일 → 뒤따르는 일) ---------- */
+const SVGNS = 'http://www.w3.org/2000/svg';
+const isRelated = (a, b) => descendants(a.id).some(x => x.id === b.id) || descendants(b.id).some(x => x.id === a.id);
+function reaches(fromId, toId, seen){   // from의 뒤따르는 일을 따라가다 to에 닿는가 (순환 방지)
+  seen = seen || new Set();
+  if(fromId === toId) return true;
+  if(seen.has(fromId)) return false; seen.add(fromId);
+  return state.tasks.some(t => t.dep && t.dep.includes(fromId) && reaches(t.id, toId, seen));
+}
+function linkCheck(pred, succ){
+  if(!pred || !succ || pred === succ) return '자기 자신과는 연결할 수 없어요.';
+  if(isRelated(pred, succ)) return '위·아래 단계끼리(포함 관계)는 연결할 수 없어요.';
+  if((succ.dep || []).includes(pred.id)) return '이미 연결되어 있어요.';
+  if((succ.dep || []).length >= 8) return '앞선 일은 8개까지 연결할 수 있어요.';
+  if(reaches(succ.id, pred.id)) return '돌고 도는 연결은 만들 수 없어요.';
+  return '';
+}
+function addLink(pred, succ){
+  const err = linkCheck(pred, succ);
+  if(err){ toast(err); return false; }
+  succ.dep = [...(succ.dep || []), pred.id];
+  persist(); render();
+  toast(`“${pred.name || '(이름 없음)'}” → “${succ.name || '(이름 없음)'}” 연결했어요.`);
+  return true;
+}
+function removeLink(succ, predId){
+  succ.dep = (succ.dep || []).filter(x => x !== predId);
+  if(!succ.dep.length) delete succ.dep;
+}
+function drawLinks(){
+  if(mode !== 'gantt') return;
+  inner.querySelectorAll('svg.links').forEach(x => x.remove());
+  const any = state.tasks.some(t => t.dep && t.dep.length);
+  if(!any) return;
+  const ir = inner.getBoundingClientRect();
+  const svg = document.createElementNS(SVGNS, 'svg');
+  svg.setAttribute('class', 'links'); svg.setAttribute('width', inner.scrollWidth); svg.setAttribute('height', inner.scrollHeight);
+  svg.innerHTML = '<defs><marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" fill="context-stroke"/></marker></defs>';
+  const bars = new Map();
+  inner.querySelectorAll('.bar[data-bid]').forEach(b => bars.set(b.dataset.bid, b.getBoundingClientRect()));
+  state.tasks.forEach(succ => (succ.dep || []).forEach(pid => {
+    const pred = idx.id.get(pid), a = bars.get(pid), b = bars.get(succ.id);
+    if(!pred || !a || !b) return;
+    const x1 = a.right - ir.left, y1 = a.top + a.height / 2 - ir.top, x2 = b.left - ir.left, y2 = b.top + b.height / 2 - ir.top;
+    const late = parse(succ.start) <= parse(pred.end);
+    const dx = Math.max(24, Math.min(60, Math.abs(x2 - x1) / 2));
+    const d = x2 >= x1 + 14 ? `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`
+                              : `M${x1},${y1} C${x1 + 28},${y1} ${x1 + 28},${(y1 + y2) / 2} ${(x1 + x2) / 2},${(y1 + y2) / 2} S${x2 - 28},${y2} ${x2},${y2}`;
+    const path = document.createElementNS(SVGNS, 'path');
+    path.setAttribute('d', d); path.setAttribute('class', 'lnk' + (late ? ' late' : '')); path.setAttribute('marker-end', 'url(#ar)');
+    const tip = document.createElementNS(SVGNS, 'title');
+    tip.textContent = `${pred.name || '(이름 없음)'} → ${succ.name || '(이름 없음)'}` + (late ? ' · 앞선 일이 끝나기 전에 시작해요' : '');
+    path.append(tip);
+    svg.append(path);
+  }));
+  inner.append(svg);
+}
+function startLink(ev, task, dot){
+  if(ev.button !== undefined && ev.button !== 0) return;
+  ev.stopPropagation(); ev.preventDefault();
+  const ir = () => inner.getBoundingClientRect();
+  const dr = dot.getBoundingClientRect();
+  const sx = dr.left + dr.width / 2, sy = dr.top + dr.height / 2;
+  const svg = document.createElementNS(SVGNS, 'svg');
+  svg.setAttribute('class', 'links tmp'); svg.setAttribute('width', inner.scrollWidth); svg.setAttribute('height', inner.scrollHeight);
+  const line = document.createElementNS(SVGNS, 'line'); line.setAttribute('class', 'lnk tmpl');
+  svg.append(line); inner.append(svg);
+  document.body.classList.add('linking');
+  let target = null;
+  const upd = e => {
+    const r = ir();
+    line.setAttribute('x1', sx - r.left); line.setAttribute('y1', sy - r.top);
+    line.setAttribute('x2', e.clientX - r.left); line.setAttribute('y2', e.clientY - r.top);
+    const el = document.elementFromPoint(e.clientX, e.clientY), b = el && el.closest && el.closest('.bar[data-bid]');
+    const t = b ? idx.id.get(b.dataset.bid) : null;
+    inner.querySelectorAll('.bar.lk-ok,.bar.lk-no').forEach(x => x.classList.remove('lk-ok', 'lk-no'));
+    target = null;
+    if(b && t && t !== task){ const ok = !linkCheck(task, t); b.classList.add(ok ? 'lk-ok' : 'lk-no'); if(ok) target = t; }
+  };
+  const done = e => {
+    document.removeEventListener('pointermove', upd);
+    document.removeEventListener('pointerup', done);
+    document.removeEventListener('pointercancel', cancel);
+    document.body.classList.remove('linking');
+    svg.remove();
+    inner.querySelectorAll('.bar.lk-ok,.bar.lk-no').forEach(x => x.classList.remove('lk-ok', 'lk-no'));
+    if(e.type === 'pointerup'){
+      if(target) addLink(task, target);
+      else { const el = document.elementFromPoint(e.clientX, e.clientY), b = el && el.closest && el.closest('.bar[data-bid]'); const t = b ? idx.id.get(b.dataset.bid) : null; if(t && t !== task) toast(linkCheck(task, t)); }
+    }
+  };
+  const cancel = e => done(e);
+  document.addEventListener('pointermove', upd); document.addEventListener('pointerup', done); document.addEventListener('pointercancel', cancel);
+  upd(ev);
+}
+const taskLabel = t => { const lv = levelOf(t); const path = []; for(let p = idx.id.get(t.parent), g = 0; p && g < 5; p = idx.id.get(p.parent), g++) path.unshift(p.name || '(이름 없음)'); return (path.length ? path.join(' › ') + ' › ' : '') + (t.name || '(이름 없음)'); };
+
 /* ---------- 아이콘 ---------- */
 const ICONS = {
   eye:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
@@ -2405,6 +2543,7 @@ function refreshRunRow(id){
   if(!old || !t) return;
   const dw = ZOOM[state.zoom];
   old.replaceWith(buildRunRow(t, levelOf(t), dw, curTlw, localToday()));
+  drawLinks();
 }
 
 /* ---------- 뽀모 집중 시계 ----------
