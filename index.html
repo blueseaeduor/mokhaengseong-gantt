@@ -106,6 +106,12 @@ button,input,select,textarea{font:inherit;color:inherit}
 .smitem button:hover{opacity:1}
 .smadd{display:flex; flex-direction:column; gap:8px}
 
+/* ＋ 추가 줄 */
+.addrow{min-height:32px; --row:32px}
+.addrow .tl{cursor:default}
+.addrow-btn{border:0; background:transparent; color:var(--sub); font-size:12.5px; padding:4px 8px; border-radius:6px; cursor:pointer; text-align:left}
+.addrow-btn:hover,.addrow-btn:focus-visible{background:var(--hover); color:var(--fg)}
+
 /* 연결선 */
 svg.links{position:absolute; left:0; top:0; z-index:2; pointer-events:none; overflow:visible}
 .lnk{fill:none; stroke:var(--sub); stroke-width:1.6; opacity:.85; color:var(--sub)}
@@ -1010,8 +1016,10 @@ function visibleRows(){
       out.push({ t, level });
       if(runOpen.has(t.id)) out.push({ t, level, run:true });
       if(!t.collapsed || fxOn()) walk(t.id, level + 1);   // 검색·우선순위·담당 필터 중에만 접힌 항목 안의 결과도 표시 (상태 필터는 접기를 따름)
+      if(!fxOn() && !t.collapsed && level < MAX_LEVEL) out.push({ add:t, level:level + 1 });   // 펼친 항목 맨 아래의 “＋ 추가” 줄
     });
   })('root', 0);
+  if(!fxOn() && out.length) out.push({ add:null, level:0 });
   return out;
 }
 
@@ -1334,11 +1342,19 @@ function render(){
                             : '아직 목행성이 없습니다. 오른쪽 위의 “+ 목행성 추가”를 눌러 시작하세요.';
     inner.append(h('div', {class:'empty', style:'position:sticky;left:0;width:var(--left)'}, [txt(msg)]));
   }
-  rows.forEach(r => inner.append(r.run ? buildRunRow(r.t, r.level, dw, tlw, today) : buildRow(r.t, r.level, dw, tlw, today)));
+  rows.forEach(r => inner.append(r.add !== undefined ? buildAddRow(r.add, r.level, tlw) : r.run ? buildRunRow(r.t, r.level, dw, tlw, today) : buildRow(r.t, r.level, dw, tlw, today)));
 
   if(shift) scrollEl.scrollLeft += shift * dw;
   drawLinks();
   if(detail.id) renderDetail();
+}
+
+function buildAddRow(parent, level, tlw){
+  const b = h('button', {class:'addrow-btn', type:'button', title:LEVELS[level] + ' 추가'}, [txt('＋ ' + LEVELS[level] + ' 추가')]);
+  b.addEventListener('click', () => addTask(parent));
+  const nm = h('div', {class:'nm'}, [h('span', {class:'ind', style:`width:${level * 18}px`}), b]);
+  const left = h('div', {class:'left'}, [nm, mkRs()]);
+  return h('div', {class:'row addrow'}, [left, h('div', {class:'tl', style:`width:${tlw}px`})]);
 }
 
 function buildRow(task, level, dw, tlw, today){
