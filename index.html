@@ -121,8 +121,8 @@ svg.links{position:absolute; left:0; top:0; z-index:2; pointer-events:none; over
 .bar:hover .lk,.bar:focus-within .lk,body.linking .bar .lk{opacity:1}
 @media (hover:none){ .bar .lk{opacity:.9; width:14px; height:14px; margin-top:-7px; right:-23px} }
 body.linking, body.linking *{cursor:crosshair !important; user-select:none}
-.bar.lk-ok{outline:2px solid var(--accent); outline-offset:2px}
-.bar.lk-no{outline:2px dashed var(--danger); outline-offset:2px}
+.bar.lk-ok,.mnode.lk-ok{outline:2px solid var(--accent); outline-offset:2px}
+.bar.lk-no,.mnode.lk-no{outline:2px dashed var(--danger); outline-offset:2px}
 
 /* 아이콘 버튼 · 실행 줄 */
 .ic{display:inline-flex; align-items:center; justify-content:center; line-height:0; pointer-events:none}
@@ -423,6 +423,41 @@ textarea.finput{resize:vertical; line-height:1.5}
 @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]) .btag.prio-high{background:#4a2323; color:#f5cfcf; border-color:#6a3333} }
 @media (max-width:640px){ .bcol{flex-basis:84vw} }
 #cal{flex:1; min-height:0; overflow:auto; padding:8px 16px 16px}
+/* 업무 관계도 */
+#map{flex:1; min-height:0; display:flex; flex-direction:column; padding:8px 16px 12px; gap:8px}
+.mhead{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.mhead .note{flex:1 1 220px; margin:0}
+.mscroll{flex:1; min-height:0; overflow:auto; border:1px solid var(--line); border-radius:10px; background:var(--surface); position:relative; cursor:grab}
+.mscroll.panning{cursor:grabbing; user-select:none}
+.msizer{position:relative}
+.mcanvas{position:absolute; left:0; top:0; transform-origin:0 0}
+.mcanvas svg{position:absolute; left:0; top:0; overflow:visible; pointer-events:none}
+.medge{fill:none; stroke:var(--line-strong, #c9c9c4); stroke-width:1.6}
+.mdep{fill:none; stroke:var(--accent); stroke-width:2}
+.mdep.late{stroke:var(--danger); stroke-dasharray:6 4}
+.mdep.hit{stroke:transparent; stroke-width:14; pointer-events:stroke; cursor:pointer; stroke-dasharray:none}
+.mdep.sel{stroke-width:3.2}
+.mnode{position:absolute; box-sizing:border-box; background:var(--bg); border:1px solid var(--line); border-left:5px solid var(--nc, var(--sub)); border-radius:9px; padding:6px 10px 6px 9px; display:flex; flex-direction:column; gap:3px; justify-content:center; cursor:pointer; box-shadow:0 1px 2px var(--shadow); text-align:left}
+.mnode:hover,.mnode:focus-visible{box-shadow:0 3px 10px var(--shadow); outline:none; border-color:var(--accent)}
+.mnode.dim{opacity:.38}
+.mnode.ready{outline:2px solid var(--st-done-fill, #3a9a6a); outline-offset:1px}
+.mnode.blocked{background:repeating-linear-gradient(135deg, var(--bg), var(--bg) 8px, color-mix(in srgb, var(--danger) 7%, var(--bg)) 8px, color-mix(in srgb, var(--danger) 7%, var(--bg)) 16px)}
+.mnode .mt{font-size:13px; font-weight:600; line-height:1.25; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere}
+.mnode .mm{display:flex; gap:6px; align-items:center; font-size:11px; color:var(--sub); white-space:nowrap}
+.mnode .mm .lv{padding:0 5px; border-radius:4px; background:var(--chip-bg, var(--hover))}
+.mnode .mm .bd{color:var(--danger); font-weight:600}
+.mnode .mm .ok{color:var(--st-done-fill, #3a9a6a); font-weight:600}
+.mnode .mp{height:3px; border-radius:2px; background:var(--st-todo-bg); overflow:hidden}
+.mnode .mp i{display:block; height:100%}
+.mtog{position:absolute; left:-11px; top:50%; margin-top:-10px; width:20px; height:20px; border-radius:50%; border:1px solid var(--line); background:var(--bg); font-size:10px; line-height:1; cursor:pointer; color:var(--sub); padding:0; z-index:3}
+.mtog:hover{background:var(--hover)}
+.mdot{position:absolute; right:-9px; top:50%; margin-top:-7px; width:14px; height:14px; border-radius:50%; background:var(--bg); border:2px solid var(--accent); cursor:crosshair; opacity:0; touch-action:none; z-index:4}
+.mnode:hover .mdot,body.linking .mdot{opacity:1}
+@media (hover:none){ .mdot{opacity:.9} }
+.mband{position:absolute; font-size:12px; color:var(--sub); font-weight:600}
+.mcut{position:fixed; z-index:70; background:var(--bg); border:1px solid var(--line); border-radius:8px; box-shadow:0 6px 20px var(--shadow); padding:6px}
+.mlegend{display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:var(--sub); align-items:center}
+.mlegend i{display:inline-block; width:14px; height:10px; border-radius:3px; vertical-align:-1px; margin-right:4px}
 .mcnav{display:flex; align-items:center; gap:8px; padding:4px 0 10px}
 .mcnav .mcl{font-size:16px; font-weight:700; min-width:110px; text-align:center}
 .mcgrid{border:1px solid var(--line); border-radius:8px; overflow:hidden; min-width:560px}
@@ -469,6 +504,7 @@ textarea.finput{resize:vertical; line-height:1.5}
     <button data-m="gantt">간트</button>
     <button data-m="cal">캘린더</button>
     <button data-m="board">칸반</button>
+    <button data-m="map">업무 관계도</button>
   </div>
   <div class="seg" id="zoom">
     <button data-z="day">일</button>
@@ -522,6 +558,7 @@ textarea.finput{resize:vertical; line-height:1.5}
 <div id="scroll"><div id="inner"></div></div>
 <div id="cal" hidden></div>
 <div id="board" hidden></div>
+<div id="map" hidden></div>
 
 <div class="backdrop" id="backdrop" hidden></div>
 <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="세부 사항" tabindex="-1" hidden></aside>
@@ -1133,7 +1170,7 @@ function toast(msg){
 
 /* ---------- 캘린더 보기 ---------- */
 let mode = 'gantt';
-try{ const sm = localStorage.getItem('gantt.mode'); if(sm === 'cal' || sm === 'board') mode = sm; }catch(e){}
+try{ const sm = localStorage.getItem('gantt.mode'); if(sm === 'cal' || sm === 'board' || sm === 'map') mode = sm; }catch(e){}
 const calM = (() => { const m = monthOf(localToday()); return { y:m.y, m:m.m }; })();
 function calShift(n){ const d = new Date(Date.UTC(calM.y, calM.m + n, 1)); calM.y = d.getUTCFullYear(); calM.m = d.getUTCMonth(); }
 function pathOf(t){
@@ -1206,6 +1243,229 @@ function moveToStatus(t, k){
   toast(`“${t.name || '(이름 없음)'}” → ${STATUS[k].label}`);
 }
 
+/* ---------- 업무 관계도: 구조(마인드맵) · 순서(앞선 일) ---------- */
+let mapTab = 'tree', mapLv = 'all', mapZ = 1, mapShowFree = true;
+try{ const v = localStorage.getItem('gantt.maptab'); if(v === 'tree' || v === 'flow') mapTab = v; const z = parseFloat(localStorage.getItem('gantt.mapz')); if(z >= .4 && z <= 1.6) mapZ = z; const l = localStorage.getItem('gantt.maplv'); if(l === '1' || l === '2') mapLv = l; }catch(e){}
+const MW = 214, MH = 58;
+let mapCut = null;
+const closeCut = () => { if(mapCut){ mapCut.remove(); mapCut = null; } };
+document.addEventListener('pointerdown', e => { if(mapCut && !mapCut.contains(e.target)) closeCut(); }, true);
+
+function mapNode(t, x, y, opts){
+  opts = opts || {};
+  const lv = levelOf(t), st = STATUS[t.status] || STATUS.todo;
+  const preds = (t.dep || []).map(id => idx.id.get(id)).filter(Boolean);
+  const blocked = preds.some(p => baseOf(p.status) !== 'done') && baseOf(t.status) !== 'done';
+  const ready = preds.length && !blocked && baseOf(t.status) !== 'done';
+  const meta = [h('span', {class:'lv'}, [txt(LEVELS[lv])]), h('span', null, [txt(`${shortDate(parse(t.start))}→${shortDate(parse(t.end))}`)])];
+  if(blocked) meta.push(h('span', {class:'bd', title:'앞선 일이 아직 끝나지 않았어요'}, [txt('막힘')]));
+  else if(ready) meta.push(h('span', {class:'ok', title:'앞선 일이 모두 끝나서 시작할 수 있어요'}, [txt('시작 가능')]));
+  const n = h('div', {class:'mnode' + (matchesFilter(t) ? '' : ' dim') + (blocked ? ' blocked' : '') + (ready ? ' ready' : ''), 'data-id':t.id, tabindex:'0', role:'button',
+    'aria-label':`${LEVELS[lv]} ${t.name || '(이름 없음)'} — 누르면 세부 사항 보기`, title:`${t.name || '(이름 없음)'} · ${st.label}`,
+    style:`left:${x}px;top:${y}px;width:${MW}px;height:${MH}px;--nc:${st.fill}`}, [
+    h('div', {class:'mt'}, [txt(t.name || '(이름 없음)')]),
+    h('div', {class:'mm'}, meta),
+    h('div', {class:'mp'}, [h('i', {style:`width:${t.progress || 0}%;background:${st.fill}`})])
+  ]);
+  n.addEventListener('click', () => { closeCut(); openDetail(t); });
+  n.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openDetail(t); } });
+  const dot = h('div', {class:'mdot', title:'끌어서 다른 항목에 놓으면 “뒤따르는 일”로 연결돼요', 'aria-hidden':'true'});
+  dot.addEventListener('click', e => e.stopPropagation());
+  dot.addEventListener('pointerdown', ev => startMapLink(ev, t, dot));
+  n.append(dot);
+  if(opts.tog){
+    const open = !t.collapsed;
+    const b = h('button', {class:'mtog', type:'button', title:open ? '접기' : '펼치기', 'aria-label':open ? '접기' : '펼치기'}, [txt(open ? '◀' : '▶')]);
+    b.addEventListener('click', e => { e.stopPropagation(); t.collapsed = !t.collapsed; persist(); render(); });
+    n.append(b);
+  }
+  return n;
+}
+
+/* 구조: 왼쪽 → 오른쪽으로 펼쳐지는 마인드맵 */
+function layoutTree(){
+  const GX = 64, GY = 14, nodes = [], edges = [];
+  let cy = 0, maxX = 0;
+  (function place(key, depth){
+    const out = [];
+    (idx.by.get(key) || []).forEach(t => {
+      const kids = depth < MAX_LEVEL && !t.collapsed ? kidsOf(t.id) : [];
+      let yy;
+      if(kids.length){
+        const ys = place(t.id, depth + 1);
+        yy = (ys[0] + ys[ys.length - 1]) / 2;
+        ys.forEach(() => {});
+      } else { yy = cy; cy += MH + GY; }
+      const x = depth * (MW + GX);
+      nodes.push({ t, x, y:yy, tog:kidsOf(t.id).length > 0 && depth < MAX_LEVEL });
+      maxX = Math.max(maxX, x + MW);
+      out.push(yy);
+    });
+    if(key === 'root') cy += 6;
+    return out;
+  })('root', 0);
+  const pos = new Map(nodes.map(n => [n.t.id, n]));
+  nodes.forEach(n => { const p = pos.get(n.t.parent); if(p) edges.push({ from:p, to:n }); });
+  return { nodes, edges, pos, w:maxX + 40, h:Math.max(cy, MH) + 20 };
+}
+
+/* 순서: 앞선 일 → 뒤따르는 일 (왼쪽 → 오른쪽 층) */
+function layoutFlow(){
+  const GX = 84, GY = 16;
+  const lvOk = t => { const l = levelOf(t); return l >= 1 && (mapLv === 'all' || String(l) === mapLv); };
+  const shown = state.tasks.filter(lvOk);
+  const set = new Set(shown.map(t => t.id));
+  const preds = t => (t.dep || []).filter(id => set.has(id)).map(id => idx.id.get(id));
+  const linked = shown.filter(t => preds(t).length || shown.some(o => (o.dep || []).includes(t.id)));
+  const free = shown.filter(t => !linked.includes(t));
+  const layer = new Map();
+  const calc = (t, seen) => {
+    if(layer.has(t.id)) return layer.get(t.id);
+    if(seen.has(t.id)) return 0; seen.add(t.id);
+    const ps = preds(t); const v = ps.length ? Math.max(...ps.map(p => calc(p, seen))) + 1 : 0;
+    layer.set(t.id, v); return v;
+  };
+  linked.forEach(t => calc(t, new Set()));
+  const cols = [];
+  linked.forEach(t => { (cols[layer.get(t.id)] = cols[layer.get(t.id)] || []).push(t); });
+  const order = new Map(state.tasks.map((t, i) => [t.id, i]));
+  cols.forEach(c => c && c.sort((a, b) => order.get(a.id) - order.get(b.id)));
+  const yOf = new Map();
+  for(let pass = 0; pass < 3; pass++){
+    cols.forEach((c, ci) => {
+      if(!c) return;
+      if(pass || ci === 0){ if(ci === 0 && !pass){ c.forEach((t, i) => yOf.set(t.id, i)); return; } }
+      c.forEach((t, i) => {
+        const ps = pass % 2 === 0 ? preds(t) : shown.filter(o => (o.dep || []).includes(t.id));
+        const ys = ps.map(p => yOf.get(p.id)).filter(v => v !== undefined);
+        yOf.set(t.id, ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length + i * 1e-3 : (yOf.get(t.id) ?? i));
+      });
+      c.sort((a, b) => yOf.get(a.id) - yOf.get(b.id));
+      c.forEach((t, i) => yOf.set(t.id, i));
+    });
+  }
+  const nodes = [], pos = new Map(); let maxY = 0, maxX = 0;
+  cols.forEach((c, ci) => { if(!c) return; c.forEach((t, i) => {
+    const n = { t, x:ci * (MW + GX), y:i * (MH + GY) }; nodes.push(n); pos.set(t.id, n); maxY = Math.max(maxY, n.y + MH); maxX = Math.max(maxX, n.x + MW);
+  }); });
+  const edges = [];
+  linked.forEach(t => preds(t).forEach(p => edges.push({ from:pos.get(p.id), to:pos.get(t.id), dep:true, pred:p, succ:t })));
+  const bands = []; let h2 = maxY;
+  if(mapShowFree && free.length){
+    const top = h2 + (linked.length ? 40 : 0);
+    if(linked.length) bands.push({ x:0, y:top - 24, text:`아직 연결 안 된 일 ${free.length}개 (상자 오른쪽 점을 끌어서 연결해 보세요)` });
+    const perRow = Math.max(1, Math.floor(Math.max(maxX, 3 * MW + 2 * GX) / (MW + 16)));
+    free.forEach((t, i) => { const n = { t, x:(i % perRow) * (MW + 16), y:top + Math.floor(i / perRow) * (MH + GY) }; nodes.push(n); pos.set(t.id, n); maxX = Math.max(maxX, n.x + MW); h2 = Math.max(h2, n.y + MH); });
+  }
+  return { nodes, edges, pos, bands, w:maxX + 40, h:Math.max(h2, MH) + 20, linkedCount:linked.length, freeCount:free.length };
+}
+
+function curve(x1, y1, x2, y2){
+  const dx = x2 >= x1 + 10 ? Math.max(30, Math.min(90, (x2 - x1) / 2)) : 70;
+  return `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
+}
+
+function renderMap(){
+  closeCut();
+  const box = $('map');
+  const L = mapTab === 'tree' ? layoutTree() : layoutFlow();
+  const seg = (items, cur, fn, label) => h('div', {class:'seg', role:'group', 'aria-label':label}, items.map(([v, l]) => {
+    const b = h('button', {type:'button', class:cur === v ? 'on' : ''}, [txt(l)]); b.addEventListener('click', () => fn(v)); return b; }));
+  const setTab = v => { mapTab = v; try{ localStorage.setItem('gantt.maptab', v); }catch(e){} renderMap(); };
+  const setLv = v => { mapLv = v; try{ localStorage.setItem('gantt.maplv', v); }catch(e){} renderMap(); };
+  const zbtn = (label, title, fn) => { const b = h('button', {type:'button', class:'btn', title, 'aria-label':title}, [txt(label)]); b.addEventListener('click', fn); return b; };
+  const setZ = z => { mapZ = Math.max(.4, Math.min(1.6, z)); try{ localStorage.setItem('gantt.mapz', String(mapZ)); }catch(e){} applyZ(); };
+  const note = mapTab === 'tree'
+    ? '목행성 → 꿈일 → 세부 꿈일이 가지로 펼쳐져요. 파란 점선은 “앞선 일” 연결입니다.'
+    : (L.linkedCount ? '왼쪽이 먼저 할 일, 오른쪽이 그다음 할 일이에요. 선을 누르면 연결을 끊을 수 있어요.' : '아직 “앞선 일” 연결이 없어요. 상자 오른쪽 점을 다른 상자로 끌거나, 항목 수정 화면에서 “앞선 일”을 고르세요.');
+  const head = h('div', {class:'mhead'}, [
+    seg([['tree', '구조 (마인드맵)'], ['flow', '순서 (앞선 일)']], mapTab, setTab, '보기 종류'),
+    mapTab === 'flow' ? seg([['all', '꿈일 + 세부'], ['1', '꿈일'], ['2', '세부 꿈일']], mapLv, setLv, '보여줄 단계') : null,
+    zbtn('−', '작게', () => setZ(mapZ - .1)), zbtn('＋', '크게', () => setZ(mapZ + .1)),
+    zbtn('화면에 맞춤', '전체가 보이게 맞추기', () => { const a = sc.clientWidth - 24, b = sc.clientHeight - 24; setZ(Math.min(1, a / L.w, b / L.h)); sc.scrollTo(0, 0); }),
+    h('span', {class:'note'}, [txt(note)])
+  ]);
+  const legend = h('div', {class:'mlegend'}, [
+    ...STLIST.map(sd => h('span', null, [h('i', {style:`background:${STATUS[sd.k].fill}`}), txt(STATUS[sd.k].label)])),
+    h('span', null, [h('i', {style:'background:repeating-linear-gradient(135deg,#fff,#fff 3px,#f3c9c4 3px,#f3c9c4 6px);border:1px solid #d99'}), txt('막힘 (앞선 일이 안 끝남)')]),
+    h('span', null, [h('i', {style:'border:2px solid var(--st-done-fill,#3a9a6a);background:transparent'}), txt('시작 가능')]),
+    h('span', null, [h('i', {style:'height:0;border-top:2px dashed var(--danger);border-radius:0;background:none'}), txt('앞선 일이 끝나기 전에 시작')])
+  ]);
+  const sc = h('div', {class:'mscroll'});
+  const sizer = h('div', {class:'msizer'});
+  const canvas = h('div', {class:'mcanvas', style:`width:${L.w}px;height:${L.h}px`});
+  const svg = document.createElementNS(SVGNS, 'svg'); svg.setAttribute('width', L.w); svg.setAttribute('height', L.h);
+  svg.innerHTML = '<defs><marker id="mar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L8 4L0 8z" fill="context-stroke"/></marker></defs>';
+  const addPath = (d, cls, extra) => { const pth = document.createElementNS(SVGNS, 'path'); pth.setAttribute('d', d); pth.setAttribute('class', cls); if(extra) Object.keys(extra).forEach(k => pth.setAttribute(k, extra[k])); svg.append(pth); return pth; };
+  /* 구조선(가지) */
+  if(mapTab === 'tree') L.edges.forEach(e => addPath(curve(e.from.x + MW, e.from.y + MH / 2, e.to.x, e.to.y + MH / 2), 'medge'));
+  /* 앞선 일 연결 */
+  const depEdges = mapTab === 'tree'
+    ? state.tasks.flatMap(t => (t.dep || []).map(id => ({ pred:idx.id.get(id), succ:t }))).filter(e => e.pred && L.pos.get(e.pred.id) && L.pos.get(e.succ.id)).map(e => ({ ...e, from:L.pos.get(e.pred.id), to:L.pos.get(e.succ.id) }))
+    : L.edges;
+  depEdges.forEach(e => {
+    const late = parse(e.succ.start) <= parse(e.pred.end);
+    const d = curve(e.from.x + MW, e.from.y + MH / 2, e.to.x, e.to.y + MH / 2);
+    const vis = addPath(d, 'mdep' + (late ? ' late' : ''), { 'marker-end':'url(#mar)', style:`color:${late ? 'var(--danger)' : 'var(--accent)'}` });
+    const hit = addPath(d, 'mdep hit');
+    const tip = document.createElementNS(SVGNS, 'title'); tip.textContent = `${e.pred.name || '(이름 없음)'} → ${e.succ.name || '(이름 없음)'}` + (late ? ' · 앞선 일이 끝나기 전에 시작해요' : '') + ' · 누르면 연결 끊기'; hit.append(tip);
+    hit.addEventListener('click', ev => {
+      closeCut(); vis.classList.add('sel');
+      const b = h('button', {class:'btn', type:'button'}, [txt('이 연결 끊기')]);
+      b.addEventListener('click', () => { removeLink(e.succ, e.pred.id); closeCut(); persist(); render(); toast('연결을 끊었어요.'); });
+      mapCut = h('div', {class:'mcut', style:`left:${Math.min(ev.clientX, innerWidth - 150)}px;top:${ev.clientY + 8}px`}, [b]); document.body.append(mapCut);
+    });
+  });
+  svg.style.pointerEvents = 'none';
+  canvas.append(svg);
+  (L.bands || []).forEach(b => canvas.append(h('div', {class:'mband', style:`left:${b.x}px;top:${b.y}px`}, [txt(b.text)])));
+  L.nodes.forEach(n => canvas.append(mapNode(n.t, n.x, n.y, { tog:mapTab === 'tree' && n.tog })));
+  sizer.append(canvas); sc.append(sizer);
+  function applyZ(){ canvas.style.transform = `scale(${mapZ})`; sizer.style.width = (L.w * mapZ) + 'px'; sizer.style.height = (L.h * mapZ) + 'px'; }
+  applyZ();
+  box.replaceChildren(head, sc, legend);
+  if(!state.tasks.length) sc.append(h('div', {class:'empty', style:'padding:24px'}, [txt('아직 목행성이 없습니다. 간트에서 “+ 목행성 추가”로 시작하세요.')]));
+  /* 빈 곳을 잡고 끌면 화면이 움직여요(마우스). 휴대폰은 손가락으로 밀면 됩니다 */
+  sc.addEventListener('pointerdown', e => {
+    if(e.pointerType !== 'mouse' || e.button !== 0 || e.target.closest('.mnode,.mtog,.mdot,.mdep')) return;
+    const sx = e.clientX, sy = e.clientY, l0 = sc.scrollLeft, t0 = sc.scrollTop;
+    sc.classList.add('panning');
+    const mv = ev => { sc.scrollLeft = l0 - (ev.clientX - sx); sc.scrollTop = t0 - (ev.clientY - sy); };
+    const up = () => { sc.classList.remove('panning'); document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); };
+    document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
+  });
+  sc.addEventListener('wheel', e => { if(e.ctrlKey){ e.preventDefault(); setZ(mapZ + (e.deltaY < 0 ? .1 : -.1)); } }, { passive:false });
+}
+/* 상자 오른쪽 점을 끌어 다른 상자에 놓으면 연결 */
+function startMapLink(ev, task, dot){
+  if(ev.button !== undefined && ev.button !== 0) return;
+  ev.stopPropagation(); ev.preventDefault();
+  const canvas = dot.closest('.mcanvas'), cr = () => canvas.getBoundingClientRect();
+  const z = () => cr().width / canvas.offsetWidth || 1;
+  const dr = dot.getBoundingClientRect(), sx = dr.left + dr.width / 2, sy = dr.top + dr.height / 2;
+  const svg = document.createElementNS(SVGNS, 'svg'); svg.setAttribute('width', canvas.offsetWidth); svg.setAttribute('height', canvas.offsetHeight); svg.style.cssText = 'position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:5';
+  const line = document.createElementNS(SVGNS, 'line'); line.setAttribute('stroke', 'var(--accent)'); line.setAttribute('stroke-width', '2.2'); line.setAttribute('stroke-dasharray', '4 3'); svg.append(line); canvas.append(svg);
+  document.body.classList.add('linking');
+  let target = null;
+  const clear = () => canvas.querySelectorAll('.mnode.lk-ok,.mnode.lk-no').forEach(x => x.classList.remove('lk-ok', 'lk-no'));
+  const upd = e => {
+    const r = cr(), k = z();
+    line.setAttribute('x1', (sx - r.left) / k); line.setAttribute('y1', (sy - r.top) / k); line.setAttribute('x2', (e.clientX - r.left) / k); line.setAttribute('y2', (e.clientY - r.top) / k);
+    const el = document.elementFromPoint(e.clientX, e.clientY), nd = el && el.closest && el.closest('.mnode'); const t = nd ? idx.id.get(nd.dataset.id) : null;
+    clear(); target = null;
+    if(nd && t && t !== task){ const ok = !linkCheck(task, t); nd.classList.add(ok ? 'lk-ok' : 'lk-no'); if(ok) target = t; }
+  };
+  const done = e => {
+    document.removeEventListener('pointermove', upd); document.removeEventListener('pointerup', done); document.removeEventListener('pointercancel', done);
+    document.body.classList.remove('linking'); svg.remove(); clear();
+    if(e.type === 'pointerup'){
+      if(target) addLink(task, target);
+      else { const el = document.elementFromPoint(e.clientX, e.clientY), nd = el && el.closest && el.closest('.mnode'); const t = nd ? idx.id.get(nd.dataset.id) : null; if(t && t !== task) toast(linkCheck(task, t)); }
+    }
+  };
+  document.addEventListener('pointermove', upd); document.addEventListener('pointerup', done); document.addEventListener('pointercancel', done);
+  upd(ev);
+}
 function renderCal(){
   const box = $('cal');
   box.replaceChildren();
@@ -1264,9 +1524,9 @@ function renderCal(){
   if(!items.length) box.append(h('div', {class:'mcempty'}, [txt(state.tasks.length ? '이 달에 보일 일정이 없습니다.' : '아직 일정이 없습니다. 위의 “+ 목행성 추가”로 시작해 보세요.')]));
 }
 function applyMode(){
-  $('scroll').hidden = mode !== 'gantt'; $('cal').hidden = mode !== 'cal'; $('board').hidden = mode !== 'board';
+  $('scroll').hidden = mode !== 'gantt'; $('cal').hidden = mode !== 'cal'; $('board').hidden = mode !== 'board'; $('map').hidden = mode !== 'map';
   ['zoom', 'expandAll', 'collapseAll'].forEach(id => { $(id).hidden = mode !== 'gantt'; });
-  $('today').hidden = mode === 'board';
+  $('today').hidden = mode === 'board' || mode === 'map';
   document.querySelectorAll('#mode button').forEach(b => b.classList.toggle('on', b.dataset.m === mode));
 }
 
@@ -1293,6 +1553,7 @@ function render(){
   applyMode();
   if(mode === 'cal'){ renderFilter(); renderCal(); return; }
   if(mode === 'board'){ renderFilter(); renderBoard(); if(detail.id) renderDetail(); return; }
+  if(mode === 'map'){ renderFilter(); renderMap(); if(detail.id) renderDetail(); return; }
   const dw = ZOOM[state.zoom];
   const shift = ensureRange();
   const days = view.end - view.start + 1;
