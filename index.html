@@ -286,6 +286,8 @@ body.reordering, body.reordering *{cursor:grabbing !important; user-select:none}
 .empty{padding:40px 16px; color:var(--sub); text-align:center}
 
 /* 백업 / 복원 패널 */
+.bkbox{border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin:0 0 10px; display:flex; flex-direction:column; gap:6px}
+.bkbox p{margin:0}
 .panel{
   position:fixed; right:16px; top:calc(env(safe-area-inset-top, 0px) + 56px);
   width:min(540px, calc(100% - 32px)); z-index:30;
@@ -542,6 +544,17 @@ textarea.finput{resize:vertical; line-height:1.5}
 
 <div class="panel" id="dataPanel" role="dialog" aria-label="백업 / 복원" hidden>
   <p>아래 내용을 복사해 메모장 등에 저장해 두면 백업이 됩니다. 저장해 둔 내용을 붙여 넣고 “가져오기”를 누르면 복원됩니다.</p>
+  <div class="bkbox" id="bkBox">
+    <b>내 드라이브에 자동 백업 (선택)</b>
+    <p>켜 두면 고칠 때마다 잠시 뒤 내 드라이브의 “목행성-백업.json” 파일이 새로 저장됩니다. 앱이 만든 파일 하나만 다루고, 드라이브의 다른 파일은 볼 수 없어요. 연결 정보는 약 1시간만 유지되므로 “다시 연결 필요”가 보이면 버튼을 한 번 눌러 주세요.</p>
+    <div class="pbtns">
+      <button class="btn" id="bkG">구글 드라이브에 연결</button>
+      <button class="btn" id="bkM">원드라이브에 연결</button>
+      <button class="btn" id="bkNow" hidden>지금 백업</button>
+      <button class="btn" id="bkOff" hidden>자동 백업 끄기</button>
+    </div>
+    <span class="pmsg" id="bkMsg" role="status"></span>
+  </div>
   <p class="pmsg" id="dataNote" hidden>로그인한 상태에서는 가져온 내용으로 이 계정의 목행성이 바뀝니다.</p>
   <textarea id="dataText" spellcheck="false" aria-label="백업 데이터"></textarea>
   <div class="pbtns">
@@ -1142,6 +1155,7 @@ function sample(){
 let saveTimer = null;
 function persist(){
   gcalSchedule();
+  if(typeof bkSchedule === 'function') bkSchedule();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => storage.save(state), storage.delay || 150);
 }
@@ -1247,7 +1261,7 @@ function moveToStatus(t, k){
 let mapTab = 'tree', mapLv = 'all', mapZ = 1, mapShowFree = true;
 try{ const v = localStorage.getItem('gantt.maptab'); if(v === 'tree' || v === 'flow') mapTab = v; const z = parseFloat(localStorage.getItem('gantt.mapz')); if(z >= .4 && z <= 1.6) mapZ = z; const l = localStorage.getItem('gantt.maplv'); if(l === '1' || l === '2') mapLv = l; }catch(e){}
 const MW = 214, MH = 58;
-let mapCut = null;
+let mapCut = null, mapLast = null;
 const closeCut = () => { if(mapCut){ mapCut.remove(); mapCut = null; } };
 document.addEventListener('pointerdown', e => { if(mapCut && !mapCut.contains(e.target)) closeCut(); }, true);
 
@@ -1383,8 +1397,11 @@ function renderMap(){
     mapTab === 'flow' ? seg([['all', '꿈일 + 세부'], ['1', '꿈일'], ['2', '세부 꿈일']], mapLv, setLv, '보여줄 단계') : null,
     zbtn('−', '작게', () => setZ(mapZ - .1)), zbtn('＋', '크게', () => setZ(mapZ + .1)),
     zbtn('화면에 맞춤', '전체가 보이게 맞추기', () => { const a = sc.clientWidth - 24, b = sc.clientHeight - 24; setZ(Math.min(1, a / L.w, b / L.h)); sc.scrollTo(0, 0); }),
+    zbtn('이미지로 저장', '지금 보이는 업무 관계도를 PNG 그림으로 저장', () => mapExport('png')),
+    zbtn('PDF로 저장', '지금 보이는 업무 관계도를 PDF로 저장', () => mapExport('pdf')),
     h('span', {class:'note'}, [txt(note)])
   ]);
+  mapLast = L;
   const legend = h('div', {class:'mlegend'}, [
     ...STLIST.map(sd => h('span', null, [h('i', {style:`background:${STATUS[sd.k].fill}`}), txt(STATUS[sd.k].label)])),
     h('span', null, [h('i', {style:'background:repeating-linear-gradient(135deg,#fff,#fff 3px,#f3c9c4 3px,#f3c9c4 6px);border:1px solid #d99'}), txt('막힘 (앞선 일이 안 끝남)')]),
@@ -1465,6 +1482,103 @@ function startMapLink(ev, task, dot){
   };
   document.addEventListener('pointermove', upd); document.addEventListener('pointerup', done); document.addEventListener('pointercancel', done);
   upd(ev);
+}
+/* 업무 관계도를 그림(PNG) / PDF 파일로 저장 — 브라우저 안에서만 만들어서 내려받아요 */
+function wrapLines(ctx, text, maxW, maxLines){
+  const out = []; let cur = '';
+  for(const ch of String(text)){
+    if(ctx.measureText(cur + ch).width > maxW && cur){ out.push(cur); cur = ch; if(out.length === maxLines) break; } else cur += ch;
+  }
+  if(out.length < maxLines && cur) out.push(cur);
+  else if(out.length === maxLines && cur){ let l = out[maxLines - 1]; while(l && ctx.measureText(l + '…').width > maxW) l = l.slice(0, -1); out[maxLines - 1] = l + '…'; }
+  return out;
+}
+function cssColor(v){
+  if(!v || v.indexOf('var(') < 0) return v || '#888';
+  const el = document.createElement('i'); el.style.color = v; document.body.append(el);
+  const c = getComputedStyle(el).color; el.remove(); return c || '#888';
+}
+function mapCanvas(){
+  const L = mapLast; if(!L || !L.nodes.length) return null;
+  const PAD = 28, TOP = 54, LEG = 34;
+  let r = 2; const w0 = L.w + PAD * 2, h0 = L.h + TOP + LEG + PAD;
+  while((w0 * r > 8000 || h0 * r > 8000 || w0 * h0 * r * r > 60e6) && r > .5) r -= .25;
+  const cv = document.createElement('canvas'); cv.width = Math.round(w0 * r); cv.height = Math.round(h0 * r);
+  const c = cv.getContext('2d'); c.scale(r, r);
+  const cs = getComputedStyle(document.documentElement);
+  const acc = (cs.getPropertyValue('--accent') || '#1976d2').trim() || '#1976d2';
+  const FONT = '"Pretendard","Noto Sans KR","Malgun Gothic",system-ui,sans-serif';
+  c.fillStyle = '#ffffff'; c.fillRect(0, 0, w0, h0);
+  c.fillStyle = '#222'; c.font = `700 18px ${FONT}`; c.textBaseline = 'alphabetic';
+  c.fillText(`${state.title || '목행성'} · 업무 관계도 (${mapTab === 'tree' ? '구조' : '순서'})`, PAD, 34);
+  c.fillStyle = '#888'; c.font = `12px ${FONT}`;
+  c.fillText(fmt(localToday()), PAD, 50);
+  c.translate(PAD, TOP);
+  const curve2 = (x1, y1, x2, y2) => { const dx = x2 >= x1 + 10 ? Math.max(30, Math.min(90, (x2 - x1) / 2)) : 70; c.beginPath(); c.moveTo(x1, y1); c.bezierCurveTo(x1 + dx, y1, x2 - dx, y2, x2, y2); c.stroke(); };
+  const arrow = (x, y, col) => { c.fillStyle = col; c.beginPath(); c.moveTo(x, y); c.lineTo(x - 9, y - 5); c.lineTo(x - 9, y + 5); c.closePath(); c.fill(); };
+  c.lineWidth = 1.6;
+  const tree = mapTab === 'tree';
+  if(tree){ c.strokeStyle = '#c9c9c4'; L.edges.forEach(e => curve2(e.from.x + MW, e.from.y + MH / 2, e.to.x, e.to.y + MH / 2)); }
+  const deps = tree
+    ? state.tasks.flatMap(t => (t.dep || []).map(id => ({ pred:idx.id.get(id), succ:t }))).filter(e => e.pred && L.pos.get(e.pred.id) && L.pos.get(e.succ.id)).map(e => ({ ...e, from:L.pos.get(e.pred.id), to:L.pos.get(e.succ.id) }))
+    : L.edges;
+  deps.forEach(e => {
+    const late = parse(e.succ.start) <= parse(e.pred.end), col = late ? '#d9382c' : acc;
+    c.strokeStyle = col; c.lineWidth = 2; c.setLineDash(late ? [6, 4] : []);
+    curve2(e.from.x + MW, e.from.y + MH / 2, e.to.x - 8, e.to.y + MH / 2); c.setLineDash([]); arrow(e.to.x, e.to.y + MH / 2, col);
+  });
+  (L.bands || []).forEach(b => { c.fillStyle = '#777'; c.font = `600 12px ${FONT}`; c.fillText(b.text, b.x, b.y + 12); });
+  L.nodes.forEach(n => {
+    const t = n.t, st0 = STATUS[t.status] || STATUS.todo, st = { fill:cssColor(st0.fill) }, lv = levelOf(t);
+    const dim = !matchesFilter(t);
+    c.globalAlpha = dim ? .4 : 1;
+    c.fillStyle = '#fff'; c.strokeStyle = '#d8d8d2'; c.lineWidth = 1;
+    c.beginPath(); c.roundRect(n.x, n.y, MW, MH, 9); c.fill(); c.stroke();
+    c.fillStyle = st.fill; c.beginPath(); c.roundRect(n.x, n.y, 5, MH, [9, 0, 0, 9]); c.fill();
+    c.fillStyle = '#222'; c.font = `600 13px ${FONT}`;
+    const lines = wrapLines(c, t.name || '(이름 없음)', MW - 24, 2);
+    lines.forEach((l, i) => c.fillText(l, n.x + 14, n.y + 16 + i * 15));
+    c.fillStyle = '#777'; c.font = `11px ${FONT}`;
+    c.fillText(`${LEVELS[lv]} ${shortDate(parse(t.start))}→${shortDate(parse(t.end))}`, n.x + 14, n.y + MH - 12);
+    c.fillStyle = '#e6e6e0'; c.fillRect(n.x + 14, n.y + MH - 6, MW - 24, 3);
+    c.fillStyle = st.fill; c.fillRect(n.x + 14, n.y + MH - 6, (MW - 24) * Math.min(100, t.progress || 0) / 100, 3);
+    c.globalAlpha = 1;
+  });
+  c.setTransform(r, 0, 0, r, 0, 0);
+  let lx = PAD; const ly = h0 - 14; c.font = `12px ${FONT}`;
+  STLIST.forEach(sd => { c.fillStyle = cssColor(STATUS[sd.k].fill); c.fillRect(lx, ly - 9, 14, 10); c.fillStyle = '#555'; c.fillText(STATUS[sd.k].label, lx + 20, ly); lx += 28 + c.measureText(STATUS[sd.k].label).width; });
+  return cv;
+}
+function saveBlob(blob, name){
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+}
+function makePdf(cv){
+  const jpg = atob(cv.toDataURL('image/jpeg', .92).split(',')[1]), jb = new Uint8Array(jpg.length);
+  for(let i = 0; i < jpg.length; i++) jb[i] = jpg.charCodeAt(i);
+  let pw = cv.width * .375, ph = cv.height * .375;   // 캔버스는 2배율 기준 → 대략 96dpi 크기의 pt
+  const lim = 14000; if(Math.max(pw, ph) > lim){ const k = lim / Math.max(pw, ph); pw *= k; ph *= k; }
+  const enc = new TextEncoder(), parts = []; let len = 0; const offs = [];
+  const push = b => { if(typeof b === 'string') b = enc.encode(b); parts.push(b); len += b.length; };
+  push('%PDF-1.4\n');
+  const obj = (n, body, stream) => { offs[n] = len; push(`${n} 0 obj\n${body}\n`); if(stream){ push('stream\n'); push(stream); push('\nendstream\n'); } push('endobj\n'); };
+  const content = `q ${pw.toFixed(2)} 0 0 ${ph.toFixed(2)} 0 0 cm /Im0 Do Q`;
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw.toFixed(2)} ${ph.toFixed(2)}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`);
+  obj(4, `<< /Type /XObject /Subtype /Image /Width ${cv.width} /Height ${cv.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jb.length} >>`, jb);
+  obj(5, `<< /Length ${content.length} >>`, content);
+  const xr = len; push(`xref\n0 6\n0000000000 65535 f \n` + [1, 2, 3, 4, 5].map(n => String(offs[n]).padStart(10, '0') + ' 00000 n \n').join(''));
+  push(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF\n`);
+  return new Blob(parts, { type:'application/pdf' });
+}
+function mapExport(kind){
+  const cv = mapCanvas(); if(!cv){ toast('저장할 내용이 없어요.'); return; }
+  const name = `업무관계도-${mapTab === 'tree' ? '구조' : '순서'}-${fmt(localToday())}`;
+  try{
+    if(kind === 'png') cv.toBlob(b => { if(b){ saveBlob(b, name + '.png'); toast('그림(PNG)으로 저장했어요.'); } else toast('그림이 너무 커서 만들지 못했어요. “화면에 맞춤”이나 단계를 줄여 보세요.'); }, 'image/png');
+    else { saveBlob(makePdf(cv), name + '.pdf'); toast('PDF로 저장했어요.'); }
+  }catch(e){ toast('저장하지 못했어요. 항목이 많다면 단계를 줄여 다시 시도해 보세요.'); }
 }
 function renderCal(){
   const box = $('cal');
@@ -2328,7 +2442,7 @@ $('data').addEventListener('click', () => {
   if(!panel.hidden){ panel.hidden = true; return; }
   if(detail.id) closeDetail();
   dataText.value = JSON.stringify(state, null, 2);
-  say('');
+  say(''); if(typeof bkRender === 'function') bkRender();
   panel.hidden = false;
 });
 $('dataClose').addEventListener('click', () => { panel.hidden = true; });
@@ -2495,6 +2609,131 @@ async function boot(){
   if(storage.synced) storage.synced(state);
   pomoResume();
 }
+/* ---------- 내 드라이브 자동 백업 (구글 드라이브 / 원드라이브, 선택 기능) ----------
+   회원 서버 저장은 그대로이고, 고칠 때마다 잠시 뒤 “목행성-백업.json” 한 파일만 내 드라이브에 덮어씁니다.
+   구글은 drive.file(앱이 만든 파일만), 원드라이브는 앱 전용 폴더 권한만 요청해요. 비밀번호·비밀 키는 저장하지 않습니다. */
+const GDRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const MSCLIENT_ID = '';   // 마이크로소프트(Azure) 앱 등록 후 여기에 앱(클라이언트) ID를 넣으면 원드라이브 버튼이 켜집니다
+const MSCOPE = 'Files.ReadWrite.AppFolder';
+const BKNAME = '목행성-백업.json';
+const bk = { kind:'', gtok:null, gexp:0, mtok:null, mexp:0, timer:null, busy:false, note:'', err:false, last:0 };
+try{ bk.kind = localStorage.getItem('gantt.bk') || ''; if(bk.kind !== 'g' && bk.kind !== 'm') bk.kind = ''; bk.last = Number(localStorage.getItem('gantt.bklast')) || 0; }catch(e){}
+const bkLive = () => (bk.kind === 'g' && bk.gtok && Date.now() < bk.gexp - 60000) || (bk.kind === 'm' && bk.mtok && Date.now() < bk.mexp - 60000);
+
+async function bkGToken(interactive){
+  if(bk.gtok && Date.now() < bk.gexp - 60000) return bk.gtok;
+  await gLoadScript();
+  return new Promise((resolve, reject) => {
+    const tc = google.accounts.oauth2.initTokenClient({
+      client_id:GCLIENT_ID, scope:GDRIVE_SCOPE,
+      callback:r => { if(r.error) return reject({ code:r.error }); bk.gtok = r.access_token; bk.gexp = Date.now() + (Number(r.expires_in) || 3600) * 1000; resolve(bk.gtok); },
+      error_callback:e => reject({ code:(e && e.type) || 'popup' })
+    });
+    tc.requestAccessToken({ prompt:interactive ? '' : 'none' });
+  });
+}
+async function bkGUpload(tok, body){
+  const H = { Authorization:'Bearer ' + tok };
+  const q = encodeURIComponent(`name='${BKNAME}' and trashed=false`);
+  const f = await fetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id)&spaces=drive', { headers:H });
+  if(!f.ok) throw { code:'http' + f.status };
+  const id = ((await f.json()).files || [])[0];
+  if(id){
+    const r = await fetch('https://www.googleapis.com/upload/drive/v3/files/' + id.id + '?uploadType=media', { method:'PATCH', headers:{ ...H, 'Content-Type':'application/json' }, body });
+    if(!r.ok) throw { code:'http' + r.status };
+  } else {
+    const bd = 'mokbk' + Date.now();
+    const mp = `--${bd}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name:BKNAME, mimeType:'application/json' })}\r\n--${bd}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${body}\r\n--${bd}--`;
+    const r = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', { method:'POST', headers:{ ...H, 'Content-Type':'multipart/related; boundary=' + bd }, body:mp });
+    if(!r.ok) throw { code:'http' + r.status };
+  }
+}
+/* 원드라이브: 인증 코드 + PKCE (팝업) */
+const b64u = b => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+async function bkMToken(){
+  if(bk.mtok && Date.now() < bk.mexp - 60000) return bk.mtok;
+  if(!MSCLIENT_ID) throw { code:'noclient' };
+  const ver = b64u(crypto.getRandomValues(new Uint8Array(32))), chal = b64u(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ver)));
+  const redirect = location.origin + '/', st = b64u(crypto.getRandomValues(new Uint8Array(12)));
+  const url = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize?' + new URLSearchParams({ client_id:MSCLIENT_ID, response_type:'code', redirect_uri:redirect, response_mode:'query', scope:MSCOPE, code_challenge:chal, code_challenge_method:'S256', state:st });
+  const pop = window.open(url, 'msLogin', 'width=520,height=680');
+  if(!pop) throw { code:'popup' };
+  const code = await new Promise((resolve, reject) => {
+    const iv = setInterval(() => {
+      try{
+        if(pop.closed){ clearInterval(iv); return reject({ code:'closed' }); }
+        if(pop.location.origin === location.origin){
+          const sp = new URLSearchParams(pop.location.search); clearInterval(iv); pop.close();
+          if(sp.get('state') !== st || !sp.get('code')) return reject({ code:sp.get('error') || 'state' });
+          resolve(sp.get('code'));
+        }
+      }catch(e){ /* 로그인 중에는 다른 주소라 읽을 수 없어요 */ }
+    }, 400);
+  });
+  const r = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body:new URLSearchParams({ client_id:MSCLIENT_ID, grant_type:'authorization_code', code, redirect_uri:redirect, code_verifier:ver, scope:MSCOPE }) });
+  const d = await r.json().catch(() => ({}));
+  if(!r.ok || !d.access_token) throw { code:d.error || 'token' };
+  bk.mtok = d.access_token; bk.mexp = Date.now() + (Number(d.expires_in) || 3600) * 1000; return bk.mtok;
+}
+async function bkMUpload(tok, body){
+  const r = await fetch('https://graph.microsoft.com/v1.0/me/drive/special/approot:/' + encodeURIComponent(BKNAME) + ':/content', { method:'PUT', headers:{ Authorization:'Bearer ' + tok, 'Content-Type':'application/json' }, body });
+  if(!r.ok) throw { code:'http' + r.status };
+}
+const bkErr = e => {
+  const c = String((e && e.code) || '');
+  if(c === 'noclient') return '원드라이브 연결 준비가 아직 안 됐어요. (마이크로소프트 앱 등록 필요)';
+  if(c === 'popup' || c === 'popup_closed' || c === 'closed' || c === 'popup_failed_to_open') return '연결 창이 닫혔거나 막혔어요. 팝업을 허용하고 다시 눌러 주세요.';
+  if(c === 'http401' || c === 'http403') return '권한이 거절됐어요. 연결을 다시 해 주세요. (구글은 앱의 drive.file 권한 승인이 필요할 수 있어요)';
+  if(c === 'access_denied') return '연결을 허용하지 않아서 중단했어요.';
+  return '백업하지 못했어요. 잠시 뒤 다시 시도해 주세요. (' + c + ')';
+};
+async function bkRun(interactive){
+  if(!bk.kind || bk.busy) return;
+  bk.busy = true; bk.err = false; bk.note = '백업 중…'; bkRender();
+  try{
+    const body = JSON.stringify(state, null, 2);
+    if(bk.kind === 'g'){ let tok; try{ tok = await bkGToken(interactive); }catch(e){ if(!interactive) throw { code:'needlogin' }; throw e; } await bkGUpload(tok, body); }
+    else { if(!bkLive() && !interactive) throw { code:'needlogin' }; await bkMUpload(await bkMToken(), body); }
+    bk.last = Date.now(); try{ localStorage.setItem('gantt.bklast', String(bk.last)); }catch(e){}
+    bk.note = ''; bk.err = false;
+  }catch(e){
+    if(e && e.code === 'needlogin'){ bk.note = '다시 연결 필요: “지금 백업”을 한 번 눌러 주세요.'; bk.err = true; }
+    else { bk.note = bkErr(e); bk.err = true; if(e && (e.code === 'http401')){ bk.gtok = null; bk.mtok = null; } }
+  }
+  bk.busy = false; bkRender();
+}
+function bkSchedule(){
+  if(!bk.kind) return;
+  clearTimeout(bk.timer);
+  bk.timer = setTimeout(() => bkRun(false), 20000);
+}
+function bkRender(){
+  if(!$('bkBox')) return;
+  const on = !!bk.kind, nm = bk.kind === 'g' ? '구글 드라이브' : '원드라이브';
+  const when = bk.last ? ' 마지막 백업: ' + new Date(bk.last).toLocaleString('ko-KR', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
+  $('bkMsg').textContent = bk.note || (on ? `${nm}에 자동 백업 중입니다.${when}` : '아직 연결하지 않았습니다.');
+  $('bkMsg').classList.toggle('err', !!bk.err);
+  $('bkNow').hidden = !on; $('bkOff').hidden = !on; $('bkNow').disabled = bk.busy;
+  $('bkG').textContent = bk.kind === 'g' ? '구글 드라이브 다시 연결' : '구글 드라이브에 연결';
+  $('bkM').textContent = bk.kind === 'm' ? '원드라이브 다시 연결' : '원드라이브에 연결';
+  $('bkM').disabled = !MSCLIENT_ID; $('bkM').title = MSCLIENT_ID ? '' : '준비 중 — 마이크로소프트 앱 등록 후 사용할 수 있어요';
+  if(!MSCLIENT_ID) $('bkM').textContent = '원드라이브 (준비 중)';
+}
+function bkStart(kind){
+  bk.kind = kind; bk.note = ''; bk.err = false; try{ localStorage.setItem('gantt.bk', kind); }catch(e){}
+  bkRun(true);
+}
+$('bkG').addEventListener('click', () => bkStart('g'));
+$('bkM').addEventListener('click', () => { if(MSCLIENT_ID) bkStart('m'); });
+$('bkNow').addEventListener('click', () => bkRun(true));
+$('bkOff').addEventListener('click', () => {
+  if(bk.gtok && window.google && google.accounts && google.accounts.oauth2){ try{ google.accounts.oauth2.revoke(bk.gtok, () => {}); }catch(e){} }
+  bk.kind = ''; bk.gtok = bk.mtok = null; bk.note = ''; bk.err = false; clearTimeout(bk.timer);
+  try{ localStorage.removeItem('gantt.bk'); }catch(e){}
+  bkRender(); toast('자동 백업을 껐어요. 이미 저장된 파일은 드라이브에 그대로 남아 있어요.');
+});
+bkRender();
+
 boot();
 
 /* ---------- 구글 캘린더 연동 (목행성 → 구글, 한쪽 방향) ----------
